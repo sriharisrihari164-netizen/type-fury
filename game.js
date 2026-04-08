@@ -2736,22 +2736,20 @@
        ================================================================ */
 
     function getArtilleryLevelData(level) {
-        // Words to type to clear the level
-        const wordsPerLevel = 10 + Math.floor(level * 2.5);
+        // Words to type to clear the level (Used for the new Wave system)
+        const enemiesPerWave = 8 + Math.floor(level * 2);
         
-        // Start with short words, gradually increase max length constraint
-        const maxLen = Math.min(15, 4 + Math.floor(level * 0.4));
+        // As level increases, base speed goes up slightly
+        const baseSpeed = 0.8 + (level * 0.1);
         
-        // As level increases, base speed goes up and spawn interval drops (spawning faster)
-        // Softened the speed scaling so the early levels are more manageable
-        const baseSpeed = 0.2 + (level * 0.03);
-        const spawnInterval = Math.max(50, 180 - (level * 8));
+        // Spawn interval gets tighter as waves progress
+        const spawnInterval = Math.max(30, 100 - (level * 8));
 
-        return { wordsPerLevel, maxLen, baseSpeed, spawnInterval };
+        return { enemiesPerWave, baseSpeed, spawnInterval };
     }
 
     /* ================================================================
-       THE NEON LEAK - Rhythm & Flow State Defense
+       THE NEON LEAK - Structured Waves & Rhythm Flow
        ================================================================ */
     const neonState = {
         active: false,
@@ -2772,7 +2770,11 @@
         canvasH: 0,
         targetWord: null,
         recentWords: [],
-        everUsed: new Set(JSON.parse(localStorage.getItem('typefury_neon_words') || '[]')) 
+        everUsed: new Set(JSON.parse(localStorage.getItem('typefury_neon_words') || '[]')),
+        wordsSpawnedInWave: 0,
+        wordsDestroyedInWave: 0,
+        levelTransition: false,
+        levelTransitionTimer: 0
     };
 
     let artCtx;
@@ -2803,15 +2805,25 @@
         // Final pool with thematic priority
         const fullPool = [...thematicPool, ...commonPool.slice(0, 150)];
 
-        // Strict Exclusion: Filter words already on screen, recently typed, OR ever used in session
+        // NO DUPLICATE STARTING LETTERS: Collect first letters of all untyped words on screen
+        const screenFirstLetters = new Set(
+            neonState.words.filter(w => w.typed === 0).map(w => w.text[0].toLowerCase())
+        );
+
+        // Strict Exclusion: Filter words already on screen, recently typed, OR sharing a starting letter
         const activeWords = neonState.words.map(w => w.text);
         const excluded = new Set([...activeWords, ...neonState.recentWords, ...(neonState.everUsed || [])]);
         
-        let filteredPool = fullPool.filter(w => !excluded.has(w));
+        let filteredPool = fullPool.filter(w => !excluded.has(w) && !screenFirstLetters.has(w[0].toLowerCase()));
         
         // EMERGENCY POOL DEPLETION: Reset session memory if we ran out of 500+ unique words
         if (filteredPool.length === 0) {
             neonState.everUsed.clear();
+            filteredPool = fullPool.filter(w => !activeWords.includes(w) && !screenFirstLetters.has(w[0].toLowerCase()));
+        }
+
+        // If even after reset we still have no matches (unlikely but possible), loosen constraints
+        if (filteredPool.length === 0) {
             filteredPool = fullPool.filter(w => !activeWords.includes(w));
         }
 
@@ -2829,8 +2841,12 @@
     }
 
     function spawnNeonWord() {
-        if (!neonState.active) return;
+        if (!neonState.active || neonState.levelTransition) return;
+        const waveData = getArtilleryLevelData(neonState.level);
+        if (neonState.wordsSpawnedInWave >= waveData.enemiesPerWave) return;
+
         const text = getNeonWord();
+        if (!text) return; // Should not happen with current constraints
         
         // Permanent exclusion update
         neonState.everUsed.add(text);
@@ -2842,8 +2858,9 @@
 
         const x = 150 + Math.random() * (neonState.canvasW - 300);
         const y = neonState.canvasH + 50; 
-        const speed = 0.8 + (neonState.level * 0.12) + Math.random() * 0.5;
+        const speed = waveData.baseSpeed + Math.random() * 0.5;
         neonState.words.push({ text, x, y, speed, typed: 0 });
+        neonState.wordsSpawnedInWave++;
     }
 
     function initArtilleryCanvas() {
@@ -2879,10 +2896,13 @@
         
         neonState.targetWord = null;
         neonState.recentWords = [];
+        neonState.wordsSpawnedInWave = 0;
+        neonState.wordsDestroyedInWave = 0;
+        neonState.levelTransition = false;
+        neonState.levelTransitionTimer = 0;
         // DO NOT clear everUsed - we want this to persist across sessions
         
         updateNeonTypingArea(); // Clear the typing area overlay
-
 
         document.getElementById('artStartOverlay').classList.add('hidden');
         document.getElementById('artHiddenInput').focus();
@@ -2910,6 +2930,7 @@
                     neonState.score += w.text.length * 15;
                     neonState.words = neonState.words.filter(ww => ww !== w);
                     neonState.targetWord = null;
+                    neonState.wordsDestroyedInWave++;
                     playSound('hit');
                 }
             } else {
@@ -2962,8 +2983,36 @@
         const w = neonState.canvasW;
         const h = neonState.canvasH;
 
+        if (neonState.levelTransition) {
+            neonState.levelTransitionTimer--;
+            
+            // Draw standard clear overlay
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(0,0,w,h);
+            
+            ctx.font = `bold 40px 'Share Tech Mono', monospace`;
+            ctx.fillStyle = '#bc00ff';
+            ctx.textAlign = 'center';
+            ctx.fillText(`FLOW WAVE ${neonState.level} CLEAR`, w/2, h/2 - 20);
+            
+            ctx.font = `20px 'Share Tech Mono', monospace`;
+            ctx.fillStyle = '#fff';
+            ctx.fillText(`STABILIZING MATRIX...`, w/2, h/2 + 20);
+            
+            if (neonState.levelTransitionTimer <= 0) {
+                neonState.level++;
+                localStorage.setItem('typefury_neon_level', neonState.level);
+                neonState.levelTransition = false;
+                startArtillery(); // Returns to "Ready" screen for next wave
+            }
+            requestAnimationFrame(neonLoop);
+            return;
+        }
+
         ctx.fillStyle = '#020205';
         ctx.fillRect(0, 0, w, h);
+        
+        const waveData = getArtilleryLevelData(neonState.level);
 
         const leakY = h * (1 - (neonState.leakLevel / 100));
         const grd = ctx.createLinearGradient(0, leakY, 0, h);
@@ -2983,17 +3032,15 @@
         const time = Date.now() * 0.002;
         ctx.moveTo(0, leakY);
         for(let x=0; x<=w; x+=20) {
-            const wave = Math.sin(x*0.01 + time) * 10;
-            ctx.lineTo(x, leakY + wave);
+            const waveValue = Math.sin(x*0.01 + time) * 10;
+            ctx.lineTo(x, leakY + waveValue);
         }
         ctx.lineTo(w, h);
         ctx.lineTo(0, h);
         ctx.fill();
 
         neonState.spawnTimer++;
-        // More aggressive spawn rate: drop to 20 instead of 40 at higher levels
-        const spawnRate = Math.max(20, 120 - (neonState.level * 10));
-        if (neonState.spawnTimer > spawnRate) {
+        if (neonState.spawnTimer > waveData.spawnInterval) {
             spawnNeonWord();
             neonState.spawnTimer = 0;
         }
@@ -3035,11 +3082,13 @@
                 neonState.leakLevel = Math.min(100, neonState.leakLevel + 8);
                 neonState.words.splice(i, 1);
                 if (neonState.targetWord === word) neonState.targetWord = null;
+                // Important: Even if it leaks, it counts as "processed" in the wave?
+                // Actually, let's only count destroyed words for clearing the wave.
             }
         }
 
-        // Aggressive leak scaling: 0.01 base + 0.01 per level
-        let riseAmount = neonState.isFlowState ? 0.005 : (0.01 + (neonState.level * 0.012));
+        // Difficulty scaling for leak rate
+        let riseAmount = neonState.isFlowState ? 0.005 : (0.01 + (neonState.level * 0.015));
         neonState.leakLevel = Math.min(100, neonState.leakLevel + riseAmount);
 
         if (neonState.leakLevel >= 100) {
@@ -3047,14 +3096,11 @@
             return;
         }
 
-        // Level up every 1000 points instead of 1500 for more rewarding (yet harder) progression
-        const sessionLevelGain = Math.floor(neonState.score / 1000);
-        const nextLevel = neonState.startLevel + sessionLevelGain;
-        if (nextLevel > neonState.level) {
-            neonState.level = nextLevel;
-            localStorage.setItem('typefury_neon_level', neonState.level);
-            playSound('levelUp');
-            triggerNeonLevelUp(nextLevel);
+        // WAVE COMPLETION CHECK
+        if (neonState.wordsDestroyedInWave >= waveData.enemiesPerWave && neonState.words.length === 0 && !neonState.levelTransition) {
+             neonState.levelTransition = true;
+             neonState.levelTransitionTimer = 120;
+             playSound('levelUp');
         }
 
         updateArtHUD();
@@ -3077,7 +3123,9 @@
             leakFill.style.height = (100 - neonState.leakLevel) + '%';
         }
         if(locNode) {
-            locNode.innerText = neonState.isFlowState ? 'OVERDRIVE' : (neonState.leakLevel > 75 ? 'CRITICAL' : 'STABLE');
+            const waveData = getArtilleryLevelData(neonState.level);
+            const progress = `${neonState.wordsDestroyedInWave}/${waveData.enemiesPerWave}`;
+            locNode.innerText = neonState.isFlowState ? `OVERDRIVE [${progress}]` : `WAVE ${neonState.level} [${progress}]`;
             locNode.style.color = neonState.isFlowState ? '#bc00ff' : (neonState.leakLevel > 75 ? '#ff2d55' : '#00f2ff');
         }
         
