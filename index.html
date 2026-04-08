@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Type Fury — Premium Typing Game</title>
+    <meta name="description" content="Type Fury: A premium typing speed game with Racing and Artillery modes.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="scanlines"></div>
+    <!-- ======================== DYNAMIC BACKGROUND ======================== -->
+    <div id="dynamicBg" class="dynamic-bg">
+        <div class="bg-layer bg-main active"></div>
+        <div class="bg-layer bg-racing"></div>
+        <div class="bg-layer bg-artillery"></div>
+        <div class="bg-layer bg-space"></div>
+        <div class="bg-grid"></div>
+        <div class="bg-vignette"></div>
+        <div class="bg-overlay"></div>
+    </div>
+
+    <!-- ======================== MAIN MENU ======================== -->
+    <div id="mainMenu" class="screen active">
+        <div class="menu-content">
+            <div class="logo-container">
+                <div class="logo-glow"></div>
+                <h1 class="logo-text">
+                    <span class="logo-type">TYPE</span>
+                    <span class="logo-fury">FURY</span>
+                </h1>
+                <div class="logo-tagline">UNLEASH YOUR SPEED</div>
+            </div>
+
+            <div class="menu-stats-bar">
+                <div class="stat-chip"><span class="stat-label">BEST WPM</span><span class="stat-value" id="menuBestWPM">0</span></div>
+                <div class="stat-chip"><span class="stat-label">BEST ACC</span><span class="stat-value" id="menuBestAcc">0%</span></div>
+            </div>
+
+            <div class="mode-selector">
+                <div class="mode-card" id="btnRacing" tabindex="0">
+                    <img src="car.png" alt="Racing Car" class="mode-card-img racing-img" />
+                    <div class="mode-title">RACING</div>
+                    <div class="mode-desc">High-speed competitive typing</div>
+                </div>
+                <div class="mode-card" id="btnArtillery" tabindex="0">
+                    <img src="neon_leak_icon.png" alt="Neon Leak System" class="mode-card-img artillery-img" />
+                    <div class="mode-title">NEON LEAK</div>
+                    <div class="mode-desc">Rhythm system flow stabilization</div>
+                </div>
+                <div class="mode-card" id="btnGalaxy" tabindex="0">
+                    <img src="ship_galaxy.png" alt="Galaxy Destroyer" class="mode-card-img galaxy-img" />
+                    <div class="mode-title">GALAXY OPS</div>
+                    <div class="mode-desc">Interstellar typing siege</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================== RACING MODE ======================== -->
+    <div id="racingScreen" class="screen">
+        <canvas id="racingCanvas"></canvas>
+        <div class="racing-hud-new">
+            <div class="hud-top">
+                <div class="time-box">
+                    <span id="racingTimeStr">00:00</span>
+                </div>
+                <div class="level-box">
+                    <span>LVL <span id="racingLevelStr">1</span></span>
+                </div>
+                <div class="words-box">
+                    <span>WORDS <span id="racingWordCountStr">0/0</span></span>
+                </div>
+                <div class="progress-box">
+                    <div class="progress-track" id="progTrack">
+                    </div>
+                </div>
+                <div class="pos-box">
+                    <span>POS <span id="racingPosStr">1/4</span></span>
+                </div>
+            </div>
+            
+            <div class="hud-bottom">
+                <div class="word-container" id="racingWordTiles">
+                    <!-- Word tiles go here -->
+                </div>
+                <!-- Hidden input for typing capturing -->
+                <input type="text" id="racingInput" class="hidden-input" autocomplete="off" autocorrect="off" spellcheck="false">
+                <div class="audio-btn" id="racingBack"><span>✕</span> EXIT</div>
+            </div>
+        </div>
+        <!-- Racing pre-start overlay -->
+        <div class="art-start-overlay" id="racingStartOverlay">
+            <div class="art-start-card">
+                <div class="art-start-title">RACING MODE</div>
+                <div class="art-opt-group">
+                    <label class="art-opt-label">Current Level:</label>
+                    <div id="racingCurrentLevelDisplay" style="font-size: 24px; color: #ffeb3b; font-weight: bold; margin-top: 5px;">LEVEL 1</div>
+                </div>
+                <div class="fury-btn" id="raceStartBtn">START RACE</div>
+            </div>
+        </div>
+        <!-- Racing results overlay -->
+        <div class="result-overlay" id="racingResult">
+            <div class="result-card">
+                <div class="result-title" id="racingResultTitle">RACE COMPLETE</div>
+                <div class="result-stats">
+                    <div class="rs"><span>WPM</span><span id="rResWPM">0</span></div>
+                    <div class="rs"><span>Accuracy</span><span id="rResAcc">0%</span></div>
+                    <div class="rs"><span>Time</span><span id="rResTime">0s</span></div>
+                    <div class="rs"><span>Position</span><span id="rResPos">1st</span></div>
+                </div>
+                <div class="result-actions">
+                    <div class="fury-btn" id="rResNext">NEXT LEVEL</div>
+                    <div class="fury-btn secondary" id="rResRestart">RACE AGAIN</div>
+                    <div class="fury-btn secondary" id="rResMenu">MAIN MENU</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================== NEON LEAK MODE ======================== -->
+    <div id="artilleryScreen" class="screen">
+        <canvas id="artilleryCanvas"></canvas>
+        <div class="artillery-hud">
+            <div class="neon-flow-hud">
+                <div class="neon-wpm-pulsar" id="artWPM">0</div>
+                <div class="neon-wpm-label">WPM</div>
+                <div class="neon-combo-meter">COMBO: <span id="artAcc">0</span></div>
+            </div>
+
+            <!-- Vertical Leak Indicators -->
+            <div class="neon-level-indicator">
+                <div class="neon-level-fill" id="artLives"></div>
+            </div>
+
+            <!-- Bottom HUD -->
+            <div class="art-layer-hud">
+                <div class="art-corner-stats tl">
+                    <div class="art-title-raw">The Neon Leak</div>
+                    <div class="art-val-raw">Level: <span id="artLevel">1</span></div>
+                    <div class="art-val-raw">Score: <span id="artScore">0</span></div>
+                </div>
+                
+                <div class="art-location-tag" id="artTypePrompt">
+                    SYSTEM > <span id="artLocation">INITIALIZING</span>
+                </div>
+
+                <div class="art-abort-raw" id="artBack">
+                    DISCONNECT <span class="art-abort-x-raw">✕</span>
+                </div>
+            </div>
+            
+
+            
+            <!-- Global Level Up Alert -->
+            <div id="artLevelUpAlert" class="neon-levelup-alert">
+                <div class="alert-glitch-text">LEVEL UP</div>
+                <div class="alert-subtext" id="artNextLevelText">FLOW CAPACITY INCREASED</div>
+            </div>
+            <div id="artTargetWord" class="art-target-word"></div>
+        </div>
+        <!-- Neon Leak pre-start overlay -->
+        <div class="art-start-overlay" id="artStartOverlay">
+            <div class="art-start-card">
+                <div class="art-start-title">NEON LEAK v1.0</div>
+                <div class="art-opt-group">
+                    <label class="art-opt-label">System State:</label>
+                    <div id="artCurrentLevelDisplay" style="font-size: 24px; color: #00e5ff; font-weight: 900; margin-top: 5px;">FLOW LEVEL 1</div>
+                </div>
+                <div class="fury-btn" id="artStartBtn">INITIATE FLOW</div>
+            </div>
+        </div>
+        <!-- Neon Leak game over -->
+        <div class="result-overlay" id="artResult">
+            <div class="result-card">
+                <div class="result-title">SYSTEM SHORT-OUT</div>
+                <div class="result-stats">
+                    <div class="rs"><span>Final Score</span><span id="aResScore">0</span></div>
+                    <div class="rs"><span>Max Wave</span><span id="aResWave">0</span></div>
+                    <div class="rs"><span>Peak WPM</span><span id="aResWPM">0</span></div>
+                </div>
+                <div class="result-actions">
+                    <div class="fury-btn" id="aResRestart">REBOOT SYSTEM</div>
+                    <div class="fury-btn secondary" id="aResMenu">MAIN MENU</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden global input for artillery keystrokes -->
+    <input type="text" id="artHiddenInput" class="hidden-input" autocomplete="off" autocorrect="off" spellcheck="false">
+
+    <!-- ======================== GALAXY OPS MODE ======================== -->
+    <div id="galaxyScreen" class="screen">
+        <canvas id="galaxyCanvas"></canvas>
+        <div class="galaxy-hud">
+            <!-- Unified Simple Neon-Glow Header -->
+            <div class="art-header-simple">
+                <div class="art-box art-box-score">
+                    <span class="art-label-small">SCORE</span>
+                    <span class="art-val-small" id="galScore">0</span>
+                </div>
+                <div class="art-box art-box-wave">
+                    <span class="art-label-small">WAVE</span>
+                    <span class="art-val-small" id="galWave">1</span>
+                </div>
+                <div class="art-box art-box-wpm">
+                    <span class="art-label-small">WPM</span>
+                    <span class="art-val-small" id="galWPM">0</span>
+                </div>
+                <div class="art-box art-box-lives">
+                    <span class="art-label-small">LIVES</span>
+                    <div class="art-hearts-simple" id="galLives">❤❤❤</div>
+                </div>
+                <div class="art-close-simple" id="galBack">✕</div>
+            </div>
+            
+            <!-- Bottom HUD with letter boxes -->
+            <div class="galaxy-bottom-hud">
+                <div class="galaxy-typing-container" id="galTypingBox">
+                    <!-- Letter boxes populated by JS -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Galaxy Mission Start -->
+        <div class="art-start-overlay" id="galStartOverlay">
+            <div class="art-start-card">
+                <div class="art-start-title">GALAXY SIEGE</div>
+                <div class="art-opt-group">
+                    <label class="art-opt-label">Mission Progress:</label>
+                    <div id="galLevelDisplay" style="font-size: 24px; color: var(--accent); font-weight: 900; margin-top: 5px;">WAVE 1</div>
+                </div>
+                <div class="fury-btn" id="galStartBtn">BEGIN OPS</div>
+            </div>
+        </div>
+
+        <!-- Galaxy Game Over -->
+        <div class="result-overlay" id="galResult">
+            <div class="result-card">
+                <div class="result-title">MISSION FAILED</div>
+                <div class="result-stats">
+                    <div class="rs"><span>Score</span><span id="galResScore">0</span></div>
+                    <div class="rs"><span>Wave</span><span id="galResWave">0</span></div>
+                    <div class="rs"><span>WPM</span><span id="galResWPM">0</span></div>
+                </div>
+                <div class="result-actions">
+                    <div class="fury-btn" id="galResRestart">RE-INITIATE</div>
+                    <div class="fury-btn secondary" id="galResMenu">ABORT MISSION</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden global input for galaxy keystrokes -->
+    <input type="text" id="galHiddenInput" class="hidden-input" autocomplete="off" autocorrect="off" spellcheck="false">
+
+    <script src="game.js"></script>
+</body>
+</html>

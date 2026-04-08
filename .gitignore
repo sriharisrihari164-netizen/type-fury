@@ -1,0 +1,17 @@
+# Python temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+tmp_*.py
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Project files
+found_games.txt
+clean_icon.py
+fix_transparency.py
+remove_bg.py
+update_words.py
+test_ids.js
