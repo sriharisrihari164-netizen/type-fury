@@ -2871,6 +2871,15 @@
     }
 
     function startArtillery() {
+        showScreen('artilleryScreen');
+        document.getElementById('artResult').classList.add('hidden');
+        document.getElementById('artStartOverlay').classList.remove('hidden');
+        document.getElementById('artCurrentLevelDisplay').textContent = 'SYSTEM CORE: READY';
+        initArtilleryCanvas();
+        neonState.active = false; // Wait for "Initiate" button
+    }
+
+    function launchArtillery() {
         neonState.active = true;
         neonState.score = 0;
         neonState.highScore = parseInt(localStorage.getItem('typefury_neon_highscore')) || 0;
@@ -2886,11 +2895,6 @@
         neonState.multiplier = 1;
         neonState.glitchIntensity = 0;
         neonState.colorHue = 190;
-        
-        showScreen('artilleryScreen');
-        document.getElementById('artResult').classList.remove('show');
-        document.getElementById('artStartOverlay').classList.remove('hidden');
-        initArtilleryCanvas();
         
         updateNeonTypingArea(); // Clear the typing area overlay
 
@@ -3319,13 +3323,14 @@
 
     function startGalaxyOps() {
         showScreen('galaxyScreen');
-        document.getElementById('galStartOverlay').style.display = 'flex';
+        document.getElementById('galStartOverlay').classList.remove('hidden');
         // Ensure we show the current wave from state
         document.getElementById('galLevelDisplay').textContent = `WAVE ${galaxyState.wave}`;
+        galaxyState.active = false; 
     }
 
     function launchGalaxy(isNewGame = true) {
-        document.getElementById('galStartOverlay').style.display = 'none';
+        document.getElementById('galStartOverlay').classList.add('hidden');
         
         // Prevent multiple concurrent loops
         if (galaxyState.animationId) {
@@ -3841,8 +3846,8 @@
         showScreen('mainMenu');
     });
     document.getElementById('galResRestart').addEventListener('click', () => {
-        document.getElementById('galResult').classList.remove('show');
-        launchGalaxy();
+        document.getElementById('galResult').classList.add('hidden');
+        launchGalaxy(true);
     });
     document.getElementById('galResMenu').addEventListener('click', () => showScreen('mainMenu'));
 
