@@ -2781,21 +2781,23 @@
         1: ['flow', 'leak', 'neon', 'data', 'grid', 'byte', 'core', 'link', 'code', 'flux', 'node', 'sync', 'task', 'port', 'init'],
         3: ['syntax', 'buffer', 'stream', 'socket', 'binary', 'matrix', 'cipher', 'packet', 'router', 'access', 'secure', 'bridge'],
         6: ['protocol', 'overflow', 'firewall', 'database', 'encrypt', 'terminal', 'frontend', 'backend', 'virtual', 'network'],
-        10: ['architecture', 'infrastructure', 'asynchronous', 'scalability', 'encryption', 'abstraction', 'deployment', 'optimization']
+        10: ['architecture', 'infrastructure', 'asynchronous', 'scalability', 'encryption', 'abstraction', 'deployment', 'optimization'],
+        15: ['cryptography', 'orchestration', 'microservices', 'containerization', 'distributed', 'concurrency', 'synchronization', 'multithreading']
     };
 
     function getNeonWord() {
         let levelKey = 1;
-        if (neonState.level >= 10) levelKey = 10;
+        if (neonState.level >= 15) levelKey = 15;
+        else if (neonState.level >= 10) levelKey = 10;
         else if (neonState.level >= 6) levelKey = 6;
         else if (neonState.level >= 3) levelKey = 3;
         
         // Get thematic words
-        const thematicPool = NEON_WORDS[levelKey] || [];
+        const thematicPool = NEON_WORDS[levelKey] || NEON_WORDS[1] || [];
         
         // Get difficulty-appropriate common words
-        const maxLen = 4 + Math.floor(neonState.level * 0.5);
-        const minLen = Math.max(3, maxLen - 4);
+        const maxLen = Math.min(18, 5 + Math.floor(neonState.level * 0.6));
+        const minLen = Math.max(3, maxLen - 5);
         const commonPool = COMMON_WORDS.filter(w => w.length >= minLen && w.length <= maxLen);
         
         // Final pool with thematic priority
@@ -2840,7 +2842,7 @@
 
         const x = 150 + Math.random() * (neonState.canvasW - 300);
         const y = neonState.canvasH + 50; 
-        const speed = 0.6 + (neonState.level * 0.08) + Math.random() * 0.4;
+        const speed = 0.8 + (neonState.level * 0.12) + Math.random() * 0.5;
         neonState.words.push({ text, x, y, speed, typed: 0 });
     }
 
@@ -2989,7 +2991,8 @@
         ctx.fill();
 
         neonState.spawnTimer++;
-        const spawnRate = Math.max(40, 120 - (neonState.level * 8));
+        // More aggressive spawn rate: drop to 20 instead of 40 at higher levels
+        const spawnRate = Math.max(20, 120 - (neonState.level * 10));
         if (neonState.spawnTimer > spawnRate) {
             spawnNeonWord();
             neonState.spawnTimer = 0;
@@ -3035,7 +3038,8 @@
             }
         }
 
-        let riseAmount = neonState.isFlowState ? 0.01 : (0.02 + (neonState.level * 0.005));
+        // Aggressive leak scaling: 0.01 base + 0.01 per level
+        let riseAmount = neonState.isFlowState ? 0.005 : (0.01 + (neonState.level * 0.012));
         neonState.leakLevel = Math.min(100, neonState.leakLevel + riseAmount);
 
         if (neonState.leakLevel >= 100) {
@@ -3043,7 +3047,8 @@
             return;
         }
 
-        const sessionLevelGain = Math.floor(neonState.score / 1500);
+        // Level up every 1000 points instead of 1500 for more rewarding (yet harder) progression
+        const sessionLevelGain = Math.floor(neonState.score / 1000);
         const nextLevel = neonState.startLevel + sessionLevelGain;
         if (nextLevel > neonState.level) {
             neonState.level = nextLevel;
