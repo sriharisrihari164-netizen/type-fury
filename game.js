@@ -2822,9 +2822,14 @@
             filteredPool = fullPool.filter(w => !activeWords.includes(w) && !screenFirstLetters.has(w[0].toLowerCase()));
         }
 
-        // If even after reset we still have no matches (unlikely but possible), loosen constraints
+        // SECOND FALLBACK: Ignore first-letter unique targeting if pool is still empty
         if (filteredPool.length === 0) {
             filteredPool = fullPool.filter(w => !activeWords.includes(w));
+        }
+
+        // ABSOLUTE FALLBACK: Return something to prevent the game from freezing
+        if (filteredPool.length === 0) {
+            filteredPool = fullPool;
         }
 
         const sorted = filteredPool.sort((a,b) => {
@@ -3082,8 +3087,9 @@
                 neonState.leakLevel = Math.min(100, neonState.leakLevel + 8);
                 neonState.words.splice(i, 1);
                 if (neonState.targetWord === word) neonState.targetWord = null;
-                // Important: Even if it leaks, it counts as "processed" in the wave?
-                // Actually, let's only count destroyed words for clearing the wave.
+                
+                // CRITICAL FIX: Increment word count even on leak, otherwise the wave gets "stuck"
+                neonState.wordsDestroyedInWave++; 
             }
         }
 
