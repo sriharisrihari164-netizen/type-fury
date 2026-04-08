@@ -2735,29 +2735,15 @@
        ARTILLERY MODE — TANKER DEFENSE, INFINITE PROGRESSION
        ================================================================ */
 
-    function getArtilleryLevelData(level) {
-        // Words to type to clear the level (Used for the new Wave system)
-        const enemiesPerWave = 8 + Math.floor(level * 2);
-        
-        // As level increases, base speed goes up slightly
-        const baseSpeed = 0.8 + (level * 0.1);
-        
-        // Spawn interval gets tighter as waves progress
-        const spawnInterval = Math.max(30, 100 - (level * 8));
-
-        return { enemiesPerWave, baseSpeed, spawnInterval };
-    }
-
     /* ================================================================
-       THE NEON LEAK - Structured Waves & Rhythm Flow
+       THE NEON LEAK - Continuous Rhythm & Endurance Flow
        ================================================================ */
     const neonState = {
         active: false,
         leakLevel: 10, 
         leakSpeed: 0.1, 
-        level: parseInt(localStorage.getItem('typefury_neon_level')) || 1,
-        startLevel: parseInt(localStorage.getItem('typefury_neon_level')) || 1,
         score: 0,
+        highScore: parseInt(localStorage.getItem('typefury_neon_highscore')) || 0,
         wpm: 0,
         combo: 0,
         isFlowState: false,
@@ -2771,10 +2757,9 @@
         targetWord: null,
         recentWords: [],
         everUsed: new Set(JSON.parse(localStorage.getItem('typefury_neon_words') || '[]')),
-        wordsSpawnedInWave: 0,
-        wordsDestroyedInWave: 0,
-        levelTransition: false,
-        levelTransitionTimer: 0
+        multiplier: 1,
+        glitchIntensity: 0,
+        colorHue: 190 // Start with Cyan
     };
 
     let artCtx;
@@ -2794,13 +2779,20 @@
         else if (neonState.level >= 6) levelKey = 6;
         else if (neonState.level >= 3) levelKey = 3;
         
-        // Get thematic words
-        const thematicPool = NEON_WORDS[levelKey] || NEON_WORDS[1] || [];
+        // Words get longer as score increases
+        const minLen = Math.min(6, 3 + Math.floor(neonState.score / 5000));
+        const maxLen = Math.min(15, 5 + Math.floor(neonState.score / 2000));
         
-        // Get difficulty-appropriate common words
-        const maxLen = Math.min(18, 5 + Math.floor(neonState.level * 0.6));
-        const minLen = Math.max(3, maxLen - 5);
         const commonPool = COMMON_WORDS.filter(w => w.length >= minLen && w.length <= maxLen);
+        
+        // Pick thematic tier based on score
+        let tier = 1;
+        if (neonState.score > 20000) tier = 15;
+        else if (neonState.score > 12000) tier = 10;
+        else if (neonState.score > 7000) tier = 6;
+        else if (neonState.score > 3000) tier = 3;
+
+        const thematicPool = NEON_WORDS[tier] || NEON_WORDS[1] || [];
         
         // Final pool with thematic priority
         const fullPool = [...thematicPool, ...commonPool.slice(0, 150)];
@@ -2846,12 +2838,10 @@
     }
 
     function spawnNeonWord() {
-        if (!neonState.active || neonState.levelTransition) return;
-        const waveData = getArtilleryLevelData(neonState.level);
-        if (neonState.wordsSpawnedInWave >= waveData.enemiesPerWave) return;
-
+        if (!neonState.active) return;
+        
         const text = getNeonWord();
-        if (!text) return; // Should not happen with current constraints
+        if (!text) return; 
         
         // Permanent exclusion update
         neonState.everUsed.add(text);
@@ -2863,9 +2853,12 @@
 
         const x = 150 + Math.random() * (neonState.canvasW - 300);
         const y = neonState.canvasH + 50; 
-        const speed = waveData.baseSpeed + Math.random() * 0.5;
+        
+        // Speed scales smoothly with score
+        const difficultyMultiplier = (neonState.score / 5000);
+        const speed = 0.8 + difficultyMultiplier + Math.random() * 0.5;
+        
         neonState.words.push({ text, x, y, speed, typed: 0 });
-        neonState.wordsSpawnedInWave++;
     }
 
     function initArtilleryCanvas() {
@@ -2878,34 +2871,26 @@
     }
 
     function startArtillery() {
+        neonState.active = true;
+        neonState.score = 0;
+        neonState.highScore = parseInt(localStorage.getItem('typefury_neon_highscore')) || 0;
+        neonState.wpm = 0;
+        neonState.combo = 0;
+        neonState.words = [];
+        neonState.spawnTimer = 0;
+        neonState.totalTyped = 0;
+        neonState.startTime = Date.now();
+        neonState.leakLevel = 10;
+        neonState.targetWord = null;
+        neonState.recentWords = [];
+        neonState.multiplier = 1;
+        neonState.glitchIntensity = 0;
+        neonState.colorHue = 190;
+        
         showScreen('artilleryScreen');
         document.getElementById('artResult').classList.remove('show');
         document.getElementById('artStartOverlay').classList.remove('hidden');
-        document.getElementById('artCurrentLevelDisplay').textContent = 'FLOW LEVEL ' + neonState.level;
         initArtilleryCanvas();
-    }
-
-    function launchArtillery() {
-        neonState.active = true;
-        neonState.leakLevel = 10;
-        neonState.score = 0;
-        neonState.combo = 0;
-        neonState.words = [];
-        neonState.isFlowState = false;
-        neonState.startTime = Date.now();
-        neonState.totalTyped = 0;
-        
-        // Preserve level from localStorage, but update startLevel for session tracking
-        neonState.level = parseInt(localStorage.getItem('typefury_neon_level')) || 1;
-        neonState.startLevel = neonState.level;
-        
-        neonState.targetWord = null;
-        neonState.recentWords = [];
-        neonState.wordsSpawnedInWave = 0;
-        neonState.wordsDestroyedInWave = 0;
-        neonState.levelTransition = false;
-        neonState.levelTransitionTimer = 0;
-        // DO NOT clear everUsed - we want this to persist across sessions
         
         updateNeonTypingArea(); // Clear the typing area overlay
 
@@ -2930,12 +2915,11 @@
                     playSound('levelUp');
                 }
                 if (w.typed >= w.text.length) {
-                    const drop = neonState.isFlowState ? 12 : 6;
+                    const drop = Math.max(5, (10 - (neonState.score / 10000))); // Harder to drop as score rises
                     neonState.leakLevel = Math.max(0, neonState.leakLevel - drop);
-                    neonState.score += w.text.length * 15;
+                    neonState.score += Math.round(w.text.length * 15 * neonState.multiplier);
                     neonState.words = neonState.words.filter(ww => ww !== w);
                     neonState.targetWord = null;
-                    neonState.wordsDestroyedInWave++;
                     playSound('hit');
                 }
             } else {
@@ -2988,39 +2972,18 @@
         const w = neonState.canvasW;
         const h = neonState.canvasH;
 
-        if (neonState.levelTransition) {
-            neonState.levelTransitionTimer--;
-            
-            // Draw standard clear overlay
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
-            ctx.fillRect(0,0,w,h);
-            
-            ctx.font = `bold 40px 'Share Tech Mono', monospace`;
-            ctx.fillStyle = '#bc00ff';
-            ctx.textAlign = 'center';
-            ctx.fillText(`FLOW WAVE ${neonState.level} CLEAR`, w/2, h/2 - 20);
-            
-            ctx.font = `20px 'Share Tech Mono', monospace`;
-            ctx.fillStyle = '#fff';
-            ctx.fillText(`STABILIZING MATRIX...`, w/2, h/2 + 20);
-            
-            if (neonState.levelTransitionTimer <= 0) {
-                neonState.level++;
-                localStorage.setItem('typefury_neon_level', neonState.level);
-                neonState.levelTransition = false;
-                startArtillery(); // Returns to "Ready" screen for next wave
-            }
-            requestAnimationFrame(neonLoop);
-            return;
-        }
-
+        // Visual Effects: Background Shift & Glitch
         ctx.fillStyle = '#020205';
         ctx.fillRect(0, 0, w, h);
         
-        const waveData = getArtilleryLevelData(neonState.level);
+        // Shift Hue based on difficulty (Up to 360)
+        neonState.colorHue = 190 + (neonState.score / 1500) % 170;
+        const primaryColor = `hsl(${neonState.colorHue}, 100%, 50%)`;
+        const secondaryColor = `hsl(${neonState.colorHue + 30}, 100%, 50%)`;
 
         const leakY = h * (1 - (neonState.leakLevel / 100));
         const grd = ctx.createLinearGradient(0, leakY, 0, h);
+        
         if (neonState.isFlowState) {
             grd.addColorStop(0, 'rgba(168, 85, 247, 0.8)');
             grd.addColorStop(1, 'rgba(88, 28, 135, 0.4)');
@@ -3028,8 +2991,8 @@
             grd.addColorStop(0, 'rgba(255, 45, 85, 0.8)');
             grd.addColorStop(1, 'rgba(127, 29, 29, 0.4)');
         } else {
-            grd.addColorStop(0, 'rgba(0, 242, 255, 0.8)');
-            grd.addColorStop(1, 'rgba(0, 50, 100, 0.4)');
+            grd.addColorStop(0, primaryColor.replace(')', ', 0.8)').replace('hsl', 'hsla'));
+            grd.addColorStop(1, secondaryColor.replace(')', ', 0.4)').replace('hsl', 'hsla'));
         }
 
         ctx.fillStyle = grd;
@@ -3037,15 +3000,17 @@
         const time = Date.now() * 0.002;
         ctx.moveTo(0, leakY);
         for(let x=0; x<=w; x+=20) {
-            const waveValue = Math.sin(x*0.01 + time) * 10;
+            const waveValue = Math.sin(x*0.01 + time) * (10 + neonState.leakLevel/10);
             ctx.lineTo(x, leakY + waveValue);
         }
         ctx.lineTo(w, h);
         ctx.lineTo(0, h);
         ctx.fill();
 
+        // Spawning Rate increases with score
         neonState.spawnTimer++;
-        if (neonState.spawnTimer > waveData.spawnInterval) {
+        const spawnInterval = Math.max(25, 120 - (neonState.score / 500));
+        if (neonState.spawnTimer > spawnInterval) {
             spawnNeonWord();
             neonState.spawnTimer = 0;
         }
@@ -3058,13 +3023,19 @@
 
             ctx.save();
             ctx.translate(word.x, word.y);
+            
+            // Glitch effect on individual words when leak is high
+            if (neonState.leakLevel > 80 && Math.random() > 0.95) {
+                ctx.translate((Math.random()-0.5)*10, 0);
+            }
+
             ctx.shadowBlur = isTarget ? 30 : 10;
-            ctx.shadowColor = isTarget ? '#00f2ff' : '#ffffff44';
-            ctx.fillStyle = isTarget ? 'rgba(0, 242, 255, 0.3)' : 'rgba(255, 255, 255, 0.05)';
+            ctx.shadowColor = isTarget ? primaryColor : 'rgba(255,255,255,0.2)';
+            ctx.fillStyle = isTarget ? primaryColor.replace(')', ', 0.3)').replace('hsl', 'hsla') : 'rgba(255, 255, 255, 0.05)';
             ctx.beginPath();
             ctx.arc(0, 0, r, 0, Math.PI * 2);
             ctx.fill();
-            ctx.strokeStyle = isTarget ? '#00f2ff' : 'rgba(255,255,255,0.2)';
+            ctx.strokeStyle = isTarget ? primaryColor : 'rgba(255,255,255,0.2)';
             ctx.lineWidth = isTarget ? 3 : 1;
             ctx.stroke();
 
@@ -3077,7 +3048,7 @@
             const fullW = ctx.measureText(word.text).width;
             let startX = -fullW / 2;
 
-            ctx.fillStyle = '#00f2ff';
+            ctx.fillStyle = primaryColor;
             ctx.fillText(typed, startX + ctx.measureText(typed).width / 2, 0);
             ctx.fillStyle = 'rgba(255,255,255,0.5)';
             ctx.fillText(untyped, startX + ctx.measureText(typed).width + ctx.measureText(untyped).width / 2, 0);
@@ -3087,26 +3058,16 @@
                 neonState.leakLevel = Math.min(100, neonState.leakLevel + 8);
                 neonState.words.splice(i, 1);
                 if (neonState.targetWord === word) neonState.targetWord = null;
-                
-                // CRITICAL FIX: Increment word count even on leak, otherwise the wave gets "stuck"
-                neonState.wordsDestroyedInWave++; 
             }
         }
 
-        // Difficulty scaling for leak rate
-        let riseAmount = neonState.isFlowState ? 0.005 : (0.01 + (neonState.level * 0.015));
+        // Leak level rising logic
+        let riseAmount = neonState.isFlowState ? 0.005 : (0.01 + (neonState.score / 100000));
         neonState.leakLevel = Math.min(100, neonState.leakLevel + riseAmount);
 
         if (neonState.leakLevel >= 100) {
             endArtillery();
             return;
-        }
-
-        // WAVE COMPLETION CHECK
-        if (neonState.wordsDestroyedInWave >= waveData.enemiesPerWave && neonState.words.length === 0 && !neonState.levelTransition) {
-             neonState.levelTransition = true;
-             neonState.levelTransitionTimer = 120;
-             playSound('levelUp');
         }
 
         updateArtHUD();
@@ -3124,14 +3085,13 @@
         if(wpmNode) wpmNode.innerText = Math.round(neonState.wpm || 0);
         if(comboNode) comboNode.innerText = neonState.combo;
         if(scoreEl) scoreEl.innerText = neonState.score;
-        if(levelEl) levelEl.innerText = neonState.level;
+        if(document.getElementById('artBest')) document.getElementById('artBest').innerText = neonState.highScore;
+        
         if(leakFill) {
             leakFill.style.height = (100 - neonState.leakLevel) + '%';
         }
         if(locNode) {
-            const waveData = getArtilleryLevelData(neonState.level);
-            const progress = `${neonState.wordsDestroyedInWave}/${waveData.enemiesPerWave}`;
-            locNode.innerText = neonState.isFlowState ? `OVERDRIVE [${progress}]` : `WAVE ${neonState.level} [${progress}]`;
+            locNode.innerText = neonState.isFlowState ? `OVERDRIVE` : `SYSTEM CORE STABLE`;
             locNode.style.color = neonState.isFlowState ? '#bc00ff' : (neonState.leakLevel > 75 ? '#ff2d55' : '#00f2ff');
         }
         
@@ -3176,11 +3136,21 @@
 
     function endArtillery() {
         neonState.active = false;
+        
+        const score = neonState.score;
+        if (score > neonState.highScore) {
+            neonState.highScore = score;
+            localStorage.setItem('typefury_neon_highscore', score);
+        }
+        
+        document.getElementById('aResScore').innerText = score;
+        document.getElementById('aResHigh').innerText = neonState.highScore;
+        document.getElementById('aResWPM').innerText = Math.round(neonState.wpm);
+        
+        document.getElementById('artEndOverlay').classList.remove('hidden');
+        document.getElementById('artResult').classList.remove('hidden');
+        
         playSound('gameOver');
-        document.getElementById('artResult').classList.add('show');
-        document.getElementById('aResScore').textContent = neonState.score;
-        document.getElementById('aResWave').textContent = neonState.level;
-        document.getElementById('aResWPM').textContent = Math.round(neonState.wpm);
     }
 
     /* ================================================================
