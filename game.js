@@ -3151,8 +3151,12 @@
         document.getElementById('aResHigh').innerText = neonState.highScore;
         document.getElementById('aResWPM').innerText = Math.round(neonState.wpm);
         
-        document.getElementById('artEndOverlay').classList.remove('hidden');
-        document.getElementById('artResult').classList.remove('hidden');
+        // Remove 'hidden' if it exists and always add 'show' for the fade animation
+        const res = document.getElementById('artResult');
+        if (res) {
+            res.classList.remove('hidden');
+            res.classList.add('show');
+        }
         
         playSound('gameOver');
     }
