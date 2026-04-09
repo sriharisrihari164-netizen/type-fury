@@ -2974,7 +2974,8 @@
 
     function handleArtilleryKey(key) {
         if (!neonState.active) return;
-        if (key.length !== 1 || !/[a-z/s]/i.test(key)) return;
+        // Fix regex typo and support basic alphabetical keys
+        if (key.length !== 1 || !/^[a-zA-Z]$/.test(key)) return;
         const ch = key.toLowerCase();
 
         if (neonState.targetWord) {
@@ -3001,7 +3002,9 @@
                     if (w.type === 'glitch') neonState.score += 100; // Bonus for dangerous targets
 
                     // PRO IDEA: Blast effect on word completion
-                    createNeonBlast(w.x, w.y, primaryColor);
+                    // FIXED: Use calculated color as primaryColor is out of scope
+                    const blastColor = `hsl(${neonState.colorHue}, 100%, 50%)`;
+                    createNeonBlast(w.x, w.y, blastColor);
 
                     neonState.words = neonState.words.filter(ww => ww !== w);
                     neonState.targetWord = null;
