@@ -3227,8 +3227,8 @@
        ================================================================ */
     
         function getGalaxyWaveData(wave) {
-        // Words to type to clear the wave (Slower word count growth)
-        const enemiesPerWave = 3 + Math.floor(wave * 0.6);
+        // Words to type to clear the wave (Increased for better practice: starts at 8)
+        const enemiesPerWave = 7 + wave;
         
         // Speed scaling (Slow Poison: Extremely gradual)
         // Wave 1: 0.30 | It takes ~25 waves to double in speed
@@ -3471,8 +3471,16 @@
         
         // Always reset these for accurate WPM and Wave tracking
         galaxyState.lives = 3;
+        galaxyState.streak = 0; // Reset streak on wave start or retry
         galaxyState.startTime = Date.now();
         galaxyState.charsTyped = 0;
+        
+        // --- PRO IDEA: THREAT LEVEL ALERT ---
+        const threatAlert = document.getElementById('galCurrentLevelDisplay');
+        if (threatAlert) {
+            threatAlert.textContent = `THREAT LEVEL ${wave}: ${wave < 5 ? 'STABLE' : (wave < 10 ? 'CRITICAL' : 'TERMINAL')}`;
+            threatAlert.style.color = wave < 5 ? '#00f2ff' : (wave < 10 ? '#ffcc00' : '#ff2d55');
+        }
         
         // Always reset these for a new session attempt
         galaxyState.enemies = [];
@@ -3588,6 +3596,7 @@
                     galaxyState.typedIndex = 1;
                     target.typedIndex = 1; // Sync for visual label
                     galaxyState.charsTyped++;
+                    galaxyState.streak++; // Streak increment starting first word
                     playTypingSound();
                     updateGalaxyTypingArea();
                     
@@ -3603,6 +3612,7 @@
                 galaxyState.typedIndex++;
                 galaxyState.currentTarget.typedIndex = galaxyState.typedIndex; 
                 galaxyState.charsTyped++;
+                galaxyState.streak++; // Correct hit streak
                 playTypingSound();
                 
                 const isComplete = (galaxyState.typedIndex === galaxyState.currentWord.length);
@@ -3619,9 +3629,10 @@
                 box.classList.add('shake');
                 setTimeout(() => box.classList.remove('shake'), 200);
                 galaxyState.vibration = 5;
+                galaxyState.streak = 0; // RESET STREAK on mistake
             }
         } catch (err) {
-            console.error("Galaxy Key Handler Error:", err);
+            console.error("Galaxy Key Error:", err);
         }
     }
 
@@ -3648,11 +3659,17 @@
         const sx = window.innerWidth/2;
         const sy = window.innerHeight - 160;
         
+        // Laser Color based on Streak (Evolution)
+        let color = '#ff2d55'; // Basic Red
+        if (galaxyState.streak >= 10) color = '#ffcc00'; // Elite Gold
+        else if (galaxyState.streak >= 5) color = '#00f2ff'; // Pro Cyan
+        
         galaxyState.projectiles.push({
             x: sx, y: sy,
             target: target,
             active: true,
             isKillShot: isKillShot,
+            color: color,
             speed: isKillShot ? 30 : 25
         });
         
@@ -3669,12 +3686,14 @@
     }
 
     function createExplosion(x, y, color) {
-        for(let i=0; i<15; i++) {
+        // PRO IDEA: Shatter Effect (Increased particle count)
+        const density = galaxyState.streak > 5 ? 50 : 25;
+        for(let i=0; i<density; i++) {
             galaxyState.particles.push({
                 x, y,
-                vx: (Math.random() - 0.5) * 10,
-                vy: (Math.random() - 0.5) * 10,
-                life: 1,
+                vx: (Math.random() - 0.5) * 15,
+                vy: (Math.random() - 0.5) * 15,
+                life: 1 + Math.random() * 0.5,
                 color
             });
         }
@@ -3861,13 +3880,13 @@
 
                 if (target && !target.dead) { 
                     if (p.isKillShot) {
-                        // Final Blow!
+                        // Final Blow with Streak Multiplier
                         target.dead = true;
-                        const points = target.word.length * 10;
+                        const points = Math.round(target.word.length * 10 * (1 + galaxyState.streak * 0.05));
                         galaxyState.score += points;
-                        createExplosion(target.x, target.y, '#00f2ff');
+                        createExplosion(target.x, target.y, p.color);
                     } else {
-                        // Small impact for individual letters
+                        // Small impact
                         createExplosion(target.x, target.y, '#fff');
                     }
                 }
@@ -3881,18 +3900,21 @@
             p.x += vx;
             p.y += vy;
             
-            // Draw bullet blob
+            // Draw bullet blob with assigned evolved color
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = p.color;
             ctx.fillStyle = '#fff';
             ctx.beginPath();
             ctx.arc(p.x, p.y, 8, 0, Math.PI*2);
             ctx.fill();
             
-            ctx.fillStyle = '#00f2ff';
+            ctx.fillStyle = p.color;
             ctx.beginPath();
             ctx.arc(p.x, p.y, 14, 0, Math.PI*2);
             ctx.globalAlpha = 0.4;
             ctx.fill();
             ctx.globalAlpha = 1.0;
+            ctx.shadowBlur = 0;
         }
         ctx.shadowBlur = 0;
 
