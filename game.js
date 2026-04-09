@@ -3183,14 +3183,14 @@
     
         function getGalaxyWaveData(wave) {
         // Words to type to clear the wave
-        const enemiesPerWave = 5 + Math.floor(wave * 1.5);
+        const enemiesPerWave = 4 + Math.floor(wave * 1.2);
         
-        // Speed scaling (More aggressive progression)
-        const baseSpeed = Math.min(6.5, 0.6 + (wave * 0.22));
-        const virusSpeed = Math.min(7.5, 0.8 + (wave * 0.3));
+        // Speed scaling (Reduced for better user experience)
+        const baseSpeed = Math.min(5.5, 0.45 + (wave * 0.12));
+        const virusSpeed = Math.min(6.5, 0.65 + (wave * 0.18));
 
-        // Spawn interval gets tighter as waves progress
-        const spawnInterval = Math.max(800, 2500 - (wave * 150));
+        // Spawn interval reduction (Reduced from 150 to 100 per wave)
+        const spawnInterval = Math.max(1000, 2800 - (wave * 100));
 
         return { enemiesPerWave, baseSpeed, virusSpeed, spawnInterval };
     }
@@ -3253,8 +3253,9 @@
         vibration: 0,
         levelTransition: false,
         levelTransitionTimer: 0,
-        stars: [], // For parallax starfield
-        pendingSpawns: [] // To clear old wave timeouts
+        stars: [],
+        pendingSpawns: [],
+        lastHUD: {} // Performance cache for DOM updates
     };
     galaxyState.shipImg.src = 'ship_galaxy.png';
     galaxyState.enemyImg.src = 'enemy_ship.png';
@@ -3372,7 +3373,7 @@
     }
 
     function launchGalaxy(isNewGame = true) {
-        document.getElementById('galStartOverlay').classList.add('hidden');
+        clearGalaxyUI();
         
         // Prevent multiple concurrent loops
         if (galaxyState.animationId) {
@@ -3399,6 +3400,12 @@
         nextGalaxyWave(isNewGame);
     }
 
+    /* Helper: Pre-cleanup for Galaxy transitions to prevent stuck states */
+    function clearGalaxyUI() {
+        document.getElementById('galStartOverlay').classList.add('hidden');
+        document.getElementById('galResult').classList.add('hidden');
+    }
+
     function nextGalaxyWave(isNewGame = false) {
         if (isNewGame) {
             galaxyState.score = 0;
@@ -3406,13 +3413,21 @@
             galaxyState.lives = 3;
             galaxyState.wave = 1;
             galaxyState.startTime = Date.now();
+            galaxyState.charsTyped = 0;
         } else {
-            // Level change: Add session level score to total before resetting
-            galaxyState.totalScore += galaxyState.score;
-            galaxyState.score = 0; 
+            // Case: Retry or Next Level
+            // If lives were 0, it's a retry of the current wave
+            if (galaxyState.lives <= 0) {
+                galaxyState.lives = 3; // Reset lives for retry
+                galaxyState.score = 0; // Wave score resets
+            } else {
+                // Natural progression: Add to total
+                galaxyState.totalScore += galaxyState.score;
+                galaxyState.score = 0;
+            }
         }
         
-        // Always reset these for a new wave
+        // Always reset these for a new session attempt
         galaxyState.enemies = [];
         galaxyState.projectiles = [];
         galaxyState.particles = [];
@@ -3423,8 +3438,15 @@
         galaxyState.wordsDestroyedInWave = 0;
         galaxyState.levelTransition = false;
         galaxyState.levelTransitionTimer = 0;
-        galaxyState.targetAngle = 0;
-        galaxyState.currentAngle = 0;
+        galaxyState.lastHUD = {}; // Force HUD refresh
+        
+        // Stop any pending spawns from old wave
+        if (galaxyState.pendingSpawns) {
+            galaxyState.pendingSpawns.forEach(timer => clearTimeout(timer));
+            galaxyState.pendingSpawns = [];
+        }
+
+        const waveData = getGalaxyWaveData(galaxyState.wave);
 
         // Simple Parallax Starfield (Original)
         galaxyState.stars = [];
@@ -3477,10 +3499,30 @@
     }
 
     function updateGalaxyHUD() {
-        document.getElementById('galScore').textContent = galaxyState.score;
-        document.getElementById('galWave').textContent = galaxyState.wave;
-        document.getElementById('galWPM').textContent = galaxyState.wpm;
-        document.getElementById('galLives').textContent = '❤'.repeat(Math.max(0, galaxyState.lives));
+        const HUD = {
+            score: galaxyState.score,
+            wave: galaxyState.wave,
+            wpm: galaxyState.wpm,
+            lives: Math.max(0, galaxyState.lives)
+        };
+        
+        // Performance: Only update DOM if values changed
+        if (galaxyState.lastHUD.score !== HUD.score) {
+            document.getElementById('galScore').textContent = HUD.score;
+            galaxyState.lastHUD.score = HUD.score;
+        }
+        if (galaxyState.lastHUD.wave !== HUD.wave) {
+            document.getElementById('galWave').textContent = HUD.wave;
+            galaxyState.lastHUD.wave = HUD.wave;
+        }
+        if (galaxyState.lastHUD.wpm !== HUD.wpm) {
+            document.getElementById('galWPM').textContent = HUD.wpm;
+            galaxyState.lastHUD.wpm = HUD.wpm;
+        }
+        if (galaxyState.lastHUD.lives !== HUD.lives) {
+            document.getElementById('galLives').textContent = '❤'.repeat(HUD.lives);
+            galaxyState.lastHUD.lives = HUD.lives;
+        }
     }
 
     function handleGalaxyKey(char) {
@@ -3603,26 +3645,22 @@
 
             ctx.clearRect(0,0,w,h);
 
-        // --- DRAW STARFIELD PARALLAX ---
+        // --- DRAW STARFIELD (Simplified for performance) ---
         ctx.fillStyle = '#fff';
+        ctx.globalAlpha = 0.5;
         galaxyState.stars.forEach(s => {
-            ctx.globalAlpha = s.opacity;
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, s.size, 0, Math.PI*2);
-            ctx.fill();
-            
-            // Move stars
+            ctx.fillRect(s.x, s.y, s.size, s.size);
             s.y += s.speed;
-            if(s.y > h) {
-                s.y = -s.size;
-                s.x = Math.random() * w;
-            }
+            if(s.y > h) { s.y = -5; s.x = Math.random() * w; }
         });
         ctx.globalAlpha = 1.0;
 
         // --- DRAW LEVEL TRANSITION ---
         if (galaxyState.levelTransition) {
             galaxyState.levelTransitionTimer--;
+            
+            // Safety: Ensure hidden input is blurred during transition to avoid double-typing
+            document.getElementById('galHiddenInput').blur();
             
             ctx.save();
             ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for overlay
@@ -3685,14 +3723,14 @@
         const recoilY = galaxyState.recoil;
         if(galaxyState.recoil > 0) galaxyState.recoil *= 0.85;
 
-        // Engine flame flicker
+        // Engine flame flicker (No shadow for performance)
         const flicker = 10 + Math.random() * 20;
-        ctx.shadowBlur = flicker;
-        ctx.shadowColor = '#00f2ff';
         ctx.fillStyle = '#00f2ff';
+        ctx.globalAlpha = 0.7;
         ctx.beginPath();
-        ctx.ellipse(0, 50 + recoilY, 15, 25 + flicker/2, 0, 0, Math.PI*2);
+        ctx.ellipse(0, 50 + recoilY, 12, 20 + flicker/2, 0, 0, Math.PI*2);
         ctx.fill();
+        ctx.globalAlpha = 1.0;
         ctx.restore();
 
         // --- DRAW SHIP ---
@@ -3712,6 +3750,7 @@
             galaxyState.muzzleFlash--;
         }
         ctx.restore();
+        ctx.shadowBlur = 0; // Robust reset for performance
 
         // Update/Draw Enemies
         galaxyState.enemies.forEach(e => {
@@ -3925,19 +3964,23 @@
 
     // Galaxy
     document.getElementById('galStartBtn').addEventListener('click', () => {
-        // If we are mid-session (lives > 0), continue. Otherwise it's a new session.
-        const isNew = galaxyState.lives <= 0 || galaxyState.score === 0;
+        // FIXED: Only reset if the player actually died (lives <= 0) or it's a fresh manual launch
+        // If we are coming from a Wave Clear transition, it's NOT a new game.
+        const isNew = galaxyState.lives <= 0;
         launchGalaxy(isNew);
     });
     document.getElementById('galBack').addEventListener('click', () => {
-        galaxyState.active = false;
+        stopGalaxy();
         showScreen('mainMenu');
     });
     document.getElementById('galResRestart').addEventListener('click', () => {
-        document.getElementById('galResult').classList.add('hidden');
-        launchGalaxy(true);
+        clearGalaxyUI();
+        launchGalaxy(false); // FALSE = Keep current wave progress
     });
-    document.getElementById('galResMenu').addEventListener('click', () => showScreen('mainMenu'));
+    document.getElementById('galResMenu').addEventListener('click', () => {
+        stopGalaxy();
+        showScreen('mainMenu');
+    });
 
     // Keep hidden input focused for mobile
     document.getElementById('artilleryScreen').addEventListener('click', () => {
