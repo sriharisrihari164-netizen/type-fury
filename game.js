@@ -2775,7 +2775,8 @@
         everUsed: new Set(JSON.parse(localStorage.getItem('typefury_neon_words') || '[]')),
         multiplier: 1,
         glitchIntensity: 0,
-        colorHue: 190 // Start with Cyan
+        colorHue: 190,
+        particles: [],
     };
 
     let artCtx;
@@ -2788,7 +2789,25 @@
         15: ['cryptography', 'orchestration', 'microservices', 'containerization', 'distributed', 'concurrency', 'synchronization', 'multithreading']
     };
 
-    function getNeonWord() {
+    /**
+     * Adaptive Word Selection for Neon Leak
+     */
+    function getNeonWord(minL = 3, maxL = 15) {
+        if (!COMMON_WORDS || COMMON_WORDS.length === 0) return "CYBER";
+        
+        let candidates = COMMON_WORDS.filter(w => 
+            w.length >= minL && 
+            w.length <= maxL && 
+            !neonState.recentWords.includes(w) && 
+            !neonState.everUsed.has(w)
+        );
+        
+        // Fallback if we've used everything in this length range
+        if (candidates.length === 0) {
+            candidates = COMMON_WORDS.filter(w => w.length >= minL && w.length <= maxL);
+        }
+        if (candidates.length === 0) candidates = COMMON_WORDS;
+
         let levelKey = 1;
         if (neonState.level >= 15) levelKey = 15;
         else if (neonState.level >= 10) levelKey = 10;
@@ -2856,7 +2875,13 @@
     function spawnNeonWord() {
         if (!neonState.active) return;
         
-        const text = getNeonWord();
+        // PRO IDEA: ADAPTIVE DIFFICULTY (Word Length Scaling)
+        let minL = 3, maxL = 6;
+        if (neonState.score > 2000) { minL = 4; maxL = 8; }
+        if (neonState.score > 5000) { minL = 6; maxL = 10; }
+        if (neonState.score > 10000) { minL = 8; maxL = 15; }
+        
+        const text = getNeonWord(minL, maxL);
         if (!text) return; 
         
         // Permanent exclusion update
@@ -2887,8 +2912,22 @@
             type, 
             typed: 0,
             offset: Math.random() * Math.PI * 2, // For swaying
-            sway: type === 'glitch' ? 2.5 : 1.2
+            sway: type === 'glitch' ? 2.5 : 1.2,
+            jitter: 0 // Track hit vibration
         });
+    }
+
+    function createNeonBlast(x, y, color) {
+        const count = 20;
+        for(let i=0; i<count; i++) {
+            neonState.particles.push({
+                x, y,
+                vx: (Math.random() - 0.5) * 12,
+                vy: (Math.random() - 0.5) * 12,
+                life: 1.0,
+                color
+            });
+        }
     }
 
     function initArtilleryCanvas() {
@@ -2961,6 +3000,9 @@
                     neonState.score += Math.round(w.text.length * 15 * neonState.multiplier);
                     if (w.type === 'glitch') neonState.score += 100; // Bonus for dangerous targets
 
+                    // PRO IDEA: Blast effect on word completion
+                    createNeonBlast(w.x, w.y, primaryColor);
+
                     neonState.words = neonState.words.filter(ww => ww !== w);
                     neonState.targetWord = null;
                     playSound('hit');
@@ -2969,6 +3011,10 @@
                 neonState.combo = 0;
                 neonState.isFlowState = false;
                 neonState.weakKeys[w.text[w.typed]] = (neonState.weakKeys[w.text[w.typed]] || 0) + 1;
+                
+                // Add jitter to the word on miss
+                w.jitter = 8;
+                
                 document.getElementById('artilleryScreen').classList.add('shake');
                 setTimeout(() => document.getElementById('artilleryScreen').classList.remove('shake'), 200);
             }
@@ -3081,9 +3127,12 @@
             ctx.save();
             ctx.translate(drawX, word.y);
             
-            // Glitch effect on individual words when leak is high
-            if (neonState.leakLevel > 80 && Math.random() > 0.95) {
-                ctx.translate((Math.random()-0.5)*10, 0);
+            // PRO IDEA: Digital Jitter (intensifies with leak level)
+            const leakJitter = neonState.leakLevel > 50 ? (neonState.leakLevel - 50) / 10 : 0;
+            const currentJitter = Math.max(word.jitter, leakJitter);
+            if (currentJitter > 0) {
+                ctx.translate((Math.random()-0.5)*currentJitter, (Math.random()-0.5)*currentJitter);
+                word.jitter *= 0.9; // Fade out hit jitter
             }
 
             const isGlitch = word.type === 'glitch';
@@ -3134,6 +3183,17 @@
             endArtillery();
             return;
         }
+
+        // Draw Particles
+        neonState.particles.forEach((p, index) => {
+            p.x += p.vx; p.y += p.vy;
+            p.life -= 0.03;
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+        });
+        neonState.particles = neonState.particles.filter(p => p.life > 0);
+        ctx.globalAlpha = 1.0;
 
         updateArtHUD();
         requestAnimationFrame(neonLoop);
