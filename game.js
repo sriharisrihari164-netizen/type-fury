@@ -2870,11 +2870,25 @@
         const x = 150 + Math.random() * (neonState.canvasW - 300);
         const y = neonState.canvasH + 50; 
         
-        // Speed scales smoothly with score
+        // Difficulty Scaling
         const difficultyMultiplier = (neonState.score / 5000);
-        const speed = 0.8 + difficultyMultiplier + Math.random() * 0.5;
         
-        neonState.words.push({ text, x, y, speed, typed: 0 });
+        // Randomly choose type: Normal (80%), Glitch (15%), Recovery (5%)
+        let type = 'normal';
+        const rand = Math.random();
+        if (rand > 0.95) type = 'recovery';
+        else if (rand > 0.80) type = 'glitch';
+
+        let speed = 0.8 + difficultyMultiplier + Math.random() * 0.4;
+        if (type === 'glitch') speed *= 1.4;
+
+        neonState.words.push({ 
+            text, x, y, speed, 
+            type, 
+            typed: 0,
+            offset: Math.random() * Math.PI * 2, // For swaying
+            sway: type === 'glitch' ? 2.5 : 1.2
+        });
     }
 
     function initArtilleryCanvas() {
@@ -2935,9 +2949,18 @@
                     playSound('levelUp');
                 }
                 if (w.typed >= w.text.length) {
-                    const drop = Math.max(5, (10 - (neonState.score / 10000))); // Harder to drop as score rises
-                    neonState.leakLevel = Math.max(0, neonState.leakLevel - drop);
+                    let drop = Math.max(5, (10 - (neonState.score / 10000))); 
+                    if (w.type === 'recovery') {
+                        // Restore system integrity!
+                        neonState.leakLevel = Math.max(0, neonState.leakLevel - 15);
+                        playSound('levelUp');
+                    } else {
+                        neonState.leakLevel = Math.max(0, neonState.leakLevel - drop);
+                    }
+                    
                     neonState.score += Math.round(w.text.length * 15 * neonState.multiplier);
+                    if (w.type === 'glitch') neonState.score += 100; // Bonus for dangerous targets
+
                     neonState.words = neonState.words.filter(ww => ww !== w);
                     neonState.targetWord = null;
                     playSound('hit');
@@ -3027,6 +3050,15 @@
         ctx.lineTo(0, h);
         ctx.fill();
 
+        // Visual Complexity: Scanlines Effect (intensifies with leak)
+        const scanlineAlpha = neonState.leakLevel > 50 ? (neonState.leakLevel - 50) / 100 : 0;
+        if (scanlineAlpha > 0) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${scanlineAlpha * 0.05})`;
+            for(let y=0; y<h; y+=4) {
+                ctx.fillRect(0, y, w, 1);
+            }
+        }
+
         // Spawning Rate increases with score
         neonState.spawnTimer++;
         const spawnInterval = Math.max(25, 120 - (neonState.score / 500));
@@ -3038,25 +3070,37 @@
         for (let i = neonState.words.length - 1; i >= 0; i--) {
             const word = neonState.words[i];
             word.y -= word.speed;
+            
+            // Wobble/Sway Effect
+            const swayAmount = Math.sin(Date.now() * 0.003 + word.offset) * word.sway;
+            const drawX = word.x + swayAmount;
+
             const isTarget = word === neonState.targetWord;
             const r = 40 + (word.text.length * 4);
 
             ctx.save();
-            ctx.translate(word.x, word.y);
+            ctx.translate(drawX, word.y);
             
             // Glitch effect on individual words when leak is high
             if (neonState.leakLevel > 80 && Math.random() > 0.95) {
                 ctx.translate((Math.random()-0.5)*10, 0);
             }
 
+            const isGlitch = word.type === 'glitch';
+            const isRecovery = word.type === 'recovery';
+
             ctx.shadowBlur = isTarget ? 30 : 10;
-            ctx.shadowColor = isTarget ? primaryColor : 'rgba(255,255,255,0.2)';
-            ctx.fillStyle = isTarget ? primaryColor.replace(')', ', 0.3)').replace('hsl', 'hsla') : 'rgba(255, 255, 255, 0.05)';
+            ctx.shadowColor = isTarget ? primaryColor : (isGlitch ? '#ff0044' : (isRecovery ? '#ffcc00' : 'rgba(255,255,255,0.2)'));
+            
+            ctx.fillStyle = isTarget ? primaryColor.replace(')', ', 0.3)').replace('hsl', 'hsla') : 
+                           (isGlitch ? 'rgba(255, 0, 68, 0.1)' : (isRecovery ? 'rgba(255, 204, 0, 0.1)' : 'rgba(255, 255, 255, 0.05)'));
+            
             ctx.beginPath();
             ctx.arc(0, 0, r, 0, Math.PI * 2);
             ctx.fill();
-            ctx.strokeStyle = isTarget ? primaryColor : 'rgba(255,255,255,0.2)';
-            ctx.lineWidth = isTarget ? 3 : 1;
+            
+            ctx.strokeStyle = isTarget ? primaryColor : (isGlitch ? '#ff0044' : (isRecovery ? '#ffcc00' : 'rgba(255,255,255,0.2)'));
+            ctx.lineWidth = (isTarget || isGlitch || isRecovery) ? 3 : 1;
             ctx.stroke();
 
             ctx.shadowBlur = 0;
@@ -3075,7 +3119,8 @@
             ctx.restore();
 
             if (word.y < -100) {
-                neonState.leakLevel = Math.min(100, neonState.leakLevel + 8);
+                const leakDamage = word.type === 'glitch' ? 12 : 8;
+                neonState.leakLevel = Math.min(100, neonState.leakLevel + leakDamage);
                 neonState.words.splice(i, 1);
                 if (neonState.targetWord === word) neonState.targetWord = null;
             }
@@ -3182,16 +3227,16 @@
        ================================================================ */
     
         function getGalaxyWaveData(wave) {
-        // Words to type to clear the wave (Slower growth)
-        const enemiesPerWave = 3 + Math.floor(wave * 0.85);
+        // Words to type to clear the wave (Even slower growth for comfort)
+        const enemiesPerWave = 3 + Math.floor(wave * 0.7);
         
         // Speed scaling (Beginner Friendly)
-        // Wave 1: 0.35 | Wave 6: 0.65 (Previously was 1.17)
-        const baseSpeed = Math.min(4.5, 0.35 + (wave * 0.06));
-        const virusSpeed = Math.min(5.5, 0.45 + (wave * 0.10));
+        // Wave 1: 0.32 | Wave 10: 0.68 (Previously was 0.65 at wave 6)
+        const baseSpeed = Math.min(4.5, 0.32 + (wave * 0.04));
+        const virusSpeed = Math.min(5.5, 0.40 + (wave * 0.07));
 
-        // Spawn interval reduction (Start slower: 3.2s)
-        const spawnInterval = Math.max(1200, 3200 - (wave * 80));
+        // Spawn interval reduction (Start slower: 3.5s)
+        const spawnInterval = Math.max(1500, 3500 - (wave * 60));
 
         return { enemiesPerWave, baseSpeed, virusSpeed, spawnInterval };
     }
