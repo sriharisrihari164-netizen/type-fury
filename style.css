@@ -84,19 +84,21 @@ html, body {
     100% { transform: scale(1.1); filter: hue-rotate(10deg); }
 }
 .bg-layer.bg-racing {
-    background: linear-gradient(180deg, #050510 0%, #0a1a2a 50%, #050510 100%);
+    background: url('bg_racing.png') center/cover no-repeat;
+    filter: brightness(0.5) saturate(1.2);
 }
 .bg-layer.bg-artillery {
-    /* Background removed for cleaner Neon Leak aesthetic */
-    background: transparent;
+    background: url('bg_artillery.png') center/cover no-repeat;
+    filter: brightness(0.6) hue-rotate(-10deg);
 }
 .bg-layer.bg-space {
     background: url('bg_space.png') center/cover no-repeat;
-    filter: brightness(0.7);
+    filter: brightness(0.6);
 }
 .bg-layer.active {
     opacity: 1;
     z-index: 1;
+    transform: scale(1.05);
 }
 .bg-overlay {
     position: absolute; inset: 0;
