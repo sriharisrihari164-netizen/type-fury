@@ -3866,6 +3866,25 @@
     /* ===== INIT ===== */
     updateMenuStats();
 
+    /* ===== TERMS & CONDITIONS ===== */
+    const btnTerms = document.getElementById('btnTerms');
+    const termsOverlay = document.getElementById('termsOverlay');
+    const termsClose = document.getElementById('termsClose');
+
+    if (btnTerms && termsOverlay && termsClose) {
+        btnTerms.addEventListener('click', () => {
+            termsOverlay.classList.add('show');
+        });
+        termsClose.addEventListener('click', () => {
+            termsOverlay.classList.remove('show');
+        });
+        termsOverlay.addEventListener('click', (e) => {
+            if (e.target === termsOverlay) {
+                termsOverlay.classList.remove('show');
+            }
+        });
+    }
+
     // Mouse Parallax for Main Menu
     document.addEventListener('mousemove', (e) => {
         const menu = document.getElementById('mainMenu');

@@ -110,12 +110,20 @@ html, body {
     display:none;
     flex-direction:column;
     z-index:2;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent) transparent;
 }
 .screen.active { display:flex; }
 
+.screen::-webkit-scrollbar { width: 6px; }
+.screen::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; }
+
 /* ======================== MAIN MENU ======================== */
 #mainMenu {
-    align-items:center; justify-content:center;
+    align-items:center; justify-content:flex-start;
+    padding: 80px 20px;
     background: radial-gradient(circle at 50% 0%, rgba(0, 229, 255, 0.05), transparent 70%);
 }
 
@@ -279,7 +287,62 @@ html, body {
     letter-spacing: 1.5px; text-transform: uppercase;
 }
 
-/* ======================== HUD (shared) ======================== */
+/* Main Menu Footer */
+.menu-footer {
+    margin-top: 40px;
+    opacity: 0.6;
+    transition: var(--transition);
+}
+.menu-footer:hover { opacity: 1; }
+.footer-link {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 10px 20px;
+    border-radius: 20px;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+.footer-link:hover {
+    color: var(--accent);
+    background: rgba(0, 242, 255, 0.05);
+    border-color: rgba(0, 242, 255, 0.2);
+    text-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* Terms Modal Specifics */
+.terms-card {
+    max-width: 800px;
+    width: 90%;
+}
+.terms-content {
+    max-height: 50vh;
+    overflow-y: auto;
+    text-align: left;
+    padding: 20px;
+    margin: 20px 0;
+    background: rgba(0,0,0,0.3);
+    border-radius: 12px;
+    font-family: var(--font-body);
+    line-height: 1.6;
+    color: rgba(255,255,255,0.8);
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent) transparent;
+}
+.terms-content::-webkit-scrollbar { width: 6px; }
+.terms-content::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; }
+.terms-content h3 {
+    color: var(--accent);
+    font-family: var(--font-display);
+    font-size: 14px;
+    letter-spacing: 1px;
+    margin: 20px 0 10px;
+    text-transform: uppercase;
+}
+.terms-content p { margin-bottom: 15px; font-size: 15px; }
+
 .hud-top-bar {
     display:flex; gap:10px; padding:10px;
     z-index:100; position:absolute; 
