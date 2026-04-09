@@ -3197,32 +3197,35 @@
 
     /**
      * Selects an appropriate word for Galaxy Mode based on the current wave.
-     * Early waves focus on short common words, while later waves introduce 
-     * longer terms and thematic artillery words.
-     */
-    function getGalaxyWord(wave) {
-        // 30% chance to pick a thematic word (artillery style) regardless of wave
-        if (Math.random() < 0.3) {
-            return ARTILLERY_WORDS[Math.floor(Math.random() * ARTILLERY_WORDS.length)];
-        }
+     /**
+      * Picks a word based on wave difficulty, ensuring it doesn't start with a forbidden letter.
+      */
+    function getGalaxyWord(wave, forbiddenLetters = []) {
+        // We'll try up to 10 times to find a word that doesn't start with a forbidden letter
+        for (let attempt = 0; attempt < 10; attempt++) {
+            let word = "";
+            // 30% chance to pick a thematic word (artillery style)
+            if (Math.random() < 0.3) {
+                word = ARTILLERY_WORDS[Math.floor(Math.random() * ARTILLERY_WORDS.length)];
+            } else {
+                const maxLength = Math.min(12, 4 + Math.floor(wave / 2));
+                const minLength = wave < 5 ? 3 : 4; 
+                const possible = COMMON_WORDS.filter(w => w.length >= minLength && w.length <= maxLength);
+                word = possible.length > 0 ? possible[Math.floor(Math.random() * possible.length)] : COMMON_WORDS[Math.floor(Math.random() * 200)];
+            }
 
-        // 70% chance to pick from the common words list, scaled by difficulty
-        // Max length increases every 2-3 waves.
-        const maxLength = Math.min(12, 4 + Math.floor(wave / 2));
-        const minLength = wave < 5 ? 3 : 4; 
-        
-        const possible = COMMON_WORDS.filter(w => w.length >= minLength && w.length <= maxLength);
-        
-        // Safety fallback
-        if (possible.length === 0) {
-            return COMMON_WORDS[Math.floor(Math.random() * 200)]; // Pick from first 200 (usually shorter/simpler)
+            if (!forbiddenLetters.includes(word[0].toLowerCase())) {
+                return word;
+            }
         }
         
-        return possible[Math.floor(Math.random() * possible.length)];
+        // Final fallback if no unique word found: pick a random one
+        return COMMON_WORDS[Math.floor(Math.random() * 100)];
     }
     const galaxyState = {
         active: false,
         score: 0,
+        totalScore: 0,
         highScore: parseInt(localStorage.getItem('typefury_galaxy_highscore')) || 0,
         wave: parseInt(localStorage.getItem('typefury_galaxy_wave')) || 1,
         wpm: 0,
@@ -3360,7 +3363,8 @@
                 scoreEl.style.fontFamily = 'var(--font-mono)';
                 cardParent.appendChild(scoreEl);
             }
-            scoreEl.textContent = `SYSTEM SCORE: ${galaxyState.score} | BEST: ${galaxyState.highScore}`;
+            const displayTotal = galaxyState.totalScore + galaxyState.score;
+            scoreEl.textContent = `SYSTEM PERFORMANCE: ${displayTotal} | BEST: ${galaxyState.highScore}`;
         }
 
         document.getElementById('galStartOverlay').classList.remove('hidden');
@@ -3385,19 +3389,27 @@
         hiddenInput.value = '';
         hiddenInput.focus();
 
-        // Clear any pending spawns from previous Wave launcher clicks
+        // Clear any pending spawns from previous session
         if (galaxyState.pendingSpawns) {
             galaxyState.pendingSpawns.forEach(timerId => clearTimeout(timerId));
             galaxyState.pendingSpawns = [];
         }
 
         galaxyState.active = true;
-        
+        nextGalaxyWave(isNewGame);
+    }
+
+    function nextGalaxyWave(isNewGame = false) {
         if (isNewGame) {
             galaxyState.score = 0;
+            galaxyState.totalScore = 0;
             galaxyState.lives = 3;
-            galaxyState.charsTyped = 0;
+            galaxyState.wave = 1;
             galaxyState.startTime = Date.now();
+        } else {
+            // Level change: Add session level score to total before resetting
+            galaxyState.totalScore += galaxyState.score;
+            galaxyState.score = 0; 
         }
         
         // Always reset these for a new wave
@@ -3451,7 +3463,11 @@
         for (let i = 0; i < waveData.enemiesPerWave; i++) {
             const timerId = setTimeout(() => {
                 if (!galaxyState.active || galaxyState.levelTransition) return;
-                const word = getGalaxyWord(galaxyState.wave);
+                
+                // Track currently visible starting letters to avoid conflicts
+                const forbidden = galaxyState.enemies.map(e => e.word[0].toLowerCase());
+                const word = getGalaxyWord(galaxyState.wave, forbidden);
+                
                 const type = Math.random() > 0.7 ? 'virus' : 'scout';
                 galaxyState.enemies.push(new GEnemy(word, type));
                 galaxyState.wordsSpawnedInWave++;
@@ -3470,58 +3486,53 @@
     function handleGalaxyKey(char) {
         if (!galaxyState.active || !char || galaxyState.levelTransition) return;
         
-        // If no word is currently being typed
-        if (!galaxyState.currentTarget) {
+        try {
             // Find an enemy starting with this char - sort by Y to pick the closest threat
-            const possibleTargets = galaxyState.enemies.filter(e => e.word[0].toLowerCase() === char.toLowerCase());
-            if (possibleTargets.length === 0) return;
-            
-            const target = possibleTargets.sort((a, b) => b.y - a.y)[0]; 
-            if (target) {
-                galaxyState.currentTarget = target;
-                galaxyState.currentWord = target.word;
-                galaxyState.typedIndex = 1;
-                target.typedIndex = 1; // Sync for visual label
+            if (!galaxyState.currentTarget) {
+                const possibleTargets = galaxyState.enemies.filter(e => e.word[0].toLowerCase() === char.toLowerCase());
+                if (possibleTargets.length === 0) return;
+                
+                const target = possibleTargets.sort((a, b) => b.y - a.y)[0]; 
+                if (target) {
+                    galaxyState.currentTarget = target;
+                    galaxyState.currentWord = target.word;
+                    galaxyState.typedIndex = 1;
+                    target.typedIndex = 1; // Sync for visual label
+                    galaxyState.charsTyped++;
+                    playTypingSound();
+                    updateGalaxyTypingArea();
+                    
+                    const isComplete = (galaxyState.typedIndex === galaxyState.currentWord.length);
+                    fireGalaxyProjectile(target, isComplete);
+                }
+                return;
+            }
+
+            // Check if correct next char
+            const nextChar = galaxyState.currentWord[galaxyState.typedIndex].toLowerCase();
+            if (char.toLowerCase() === nextChar) {
+                galaxyState.typedIndex++;
+                galaxyState.currentTarget.typedIndex = galaxyState.typedIndex; 
                 galaxyState.charsTyped++;
                 playTypingSound();
-                updateGalaxyTypingArea();
                 
-                // Fire on first letter
                 const isComplete = (galaxyState.typedIndex === galaxyState.currentWord.length);
-                fireGalaxyProjectile(target, isComplete);
+                fireGalaxyProjectile(galaxyState.currentTarget, isComplete);
+                
+                if (isComplete) {
+                    galaxyState.currentTarget = null;
+                    galaxyState.currentWord = '';
+                    galaxyState.typedIndex = 0;
+                }
+                updateGalaxyTypingArea();
+            } else {
+                const box = document.getElementById('galTypingBox');
+                box.classList.add('shake');
+                setTimeout(() => box.classList.remove('shake'), 200);
+                galaxyState.vibration = 5;
             }
-            return;
-        }
-
-        // Check if correct next char
-        const nextChar = galaxyState.currentWord[galaxyState.typedIndex].toLowerCase();
-        if (char.toLowerCase() === nextChar) {
-            galaxyState.typedIndex++;
-            galaxyState.currentTarget.typedIndex = galaxyState.typedIndex; // Sync for visual label
-            galaxyState.charsTyped++;
-            playTypingSound();
-            
-            const isComplete = (galaxyState.typedIndex === galaxyState.currentWord.length);
-            
-            // SHOUTING EFFECT: Fire on every correct letter (like Artillery Mode)
-            // Only the final letter's projectile will actually destroy the ship
-            fireGalaxyProjectile(galaxyState.currentTarget, isComplete);
-            
-            if (isComplete) {
-                // Word complete logic (handled by projectile impact now)
-                galaxyState.currentTarget = null;
-                galaxyState.currentWord = '';
-                galaxyState.typedIndex = 0;
-            }
-            updateGalaxyTypingArea();
-        } else {
-            // Error
-            const box = document.getElementById('galTypingBox');
-            box.classList.add('shake');
-            setTimeout(() => box.classList.remove('shake'), 200);
-            
-            // Add slight vibration on error
-            galaxyState.vibration = 5;
+        } catch (err) {
+            console.error("Galaxy Key Handler Error:", err);
         }
     }
 
@@ -3583,13 +3594,14 @@
     function galaxyLoop() {
         if (!galaxyState.active || !galaxyState.ctx) return;
         
-        const ctx = galaxyState.ctx;
-        const w = galaxyState.canvas.width;
-        const h = galaxyState.canvas.height;
-        const centerX = w/2;
-        const shipY = h - 220;
+        try {
+            const ctx = galaxyState.ctx;
+            const w = galaxyState.canvas.width;
+            const h = galaxyState.canvas.height;
+            const centerX = w/2;
+            const shipY = h - 220;
 
-        ctx.clearRect(0,0,w,h);
+            ctx.clearRect(0,0,w,h);
 
         // --- DRAW STARFIELD PARALLAX ---
         ctx.fillStyle = '#fff';
@@ -3753,15 +3765,17 @@
                 const target = p.target;
                 galaxyState.projectiles.splice(i, 1);
 
-                if (p.isKillShot) {
-                    // Final Blow!
-                    target.dead = true;
-                    galaxyState.score += target.word.length * 10;
-                    createExplosion(target.x, target.y, '#00f2ff');
-                    // Note: wordsDestroyedInWave is now handled in the main loop above
-                } else {
-                    // Small impact for individual letters
-                    createExplosion(target.x, target.y, '#fff');
+                if (target && !target.dead) { 
+                    if (p.isKillShot) {
+                        // Final Blow!
+                        target.dead = true;
+                        const points = target.word.length * 10;
+                        galaxyState.score += points;
+                        createExplosion(target.x, target.y, '#00f2ff');
+                    } else {
+                        // Small impact for individual letters
+                        createExplosion(target.x, target.y, '#fff');
+                    }
                 }
                 
                 updateGalaxyHUD();
@@ -3811,18 +3825,26 @@
         }
 
         galaxyState.animationId = requestAnimationFrame(galaxyLoop);
+        } catch (err) {
+            console.error("Galaxy Loop Error:", err);
+            // Ensure the loop can recover if it's still active
+            if (galaxyState.active) {
+                galaxyState.animationId = requestAnimationFrame(galaxyLoop);
+            }
+        }
     }
 
     function endGalaxy() {
         galaxyState.active = false;
         
-        // Save highscore
-        if (galaxyState.score > galaxyState.highScore) {
-            galaxyState.highScore = galaxyState.score;
+        // Save highscore against Total Score
+        const finalTotal = galaxyState.totalScore + galaxyState.score;
+        if (finalTotal > galaxyState.highScore) {
+            galaxyState.highScore = finalTotal;
             localStorage.setItem('typefury_galaxy_highscore', galaxyState.highScore);
         }
 
-        document.getElementById('galResScore').textContent = galaxyState.score;
+        document.getElementById('galResScore').textContent = finalTotal;
         document.getElementById('galResWave').textContent = galaxyState.wave;
         document.getElementById('galResWPM').textContent = galaxyState.wpm;
         document.getElementById('galResult').classList.add('show');
