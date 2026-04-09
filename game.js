@@ -3645,16 +3645,13 @@
             const centerX = w/2;
             const shipY = h - 220;
 
-            // Robust Clear: Overscan by 10px to ensure total surface cache clear
-            ctx.clearRect(-10,-10,w + 20,h + 20);
+            ctx.clearRect(0,0,w,h);
 
         // --- DRAW STARFIELD (Simplified for performance) ---
         ctx.fillStyle = '#fff';
         ctx.globalAlpha = 0.5;
         galaxyState.stars.forEach(s => {
-            if (s.y > -5 && s.y < h + 5) {
-                ctx.fillRect(s.x, s.y, s.size, s.size);
-            }
+            ctx.fillRect(s.x, s.y, s.size, s.size);
             s.y += s.speed;
             if(s.y > h) { s.y = -5; s.x = Math.random() * w; }
         });
@@ -3851,11 +3848,11 @@
             p.x += p.vx; p.y += p.vy;
             p.life -= 0.02;
             ctx.fillStyle = p.color;
-            // Use absolute coordinates for particles - ensure they are in visible bounds
-            if (p.y > 0 && p.y < h) {
-                ctx.arc(p.x, p.y, 3, 0, Math.PI*2);
-                ctx.fill();
-            }
+            ctx.globalAlpha = p.life;
+            ctx.beginPath();
+            // Use absolute coordinates for particles
+            ctx.arc(p.x, p.y, 3, 0, Math.PI*2);
+            ctx.fill();
         });
         galaxyState.particles = galaxyState.particles.filter(p => p.life > 0);
         ctx.globalAlpha = 1.0;
