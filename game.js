@@ -3182,15 +3182,16 @@
        ================================================================ */
     
         function getGalaxyWaveData(wave) {
-        // Words to type to clear the wave
-        const enemiesPerWave = 4 + Math.floor(wave * 1.2);
+        // Words to type to clear the wave (Slower growth)
+        const enemiesPerWave = 3 + Math.floor(wave * 0.85);
         
-        // Speed scaling (Reduced for better user experience)
-        const baseSpeed = Math.min(5.5, 0.45 + (wave * 0.12));
-        const virusSpeed = Math.min(6.5, 0.65 + (wave * 0.18));
+        // Speed scaling (Beginner Friendly)
+        // Wave 1: 0.35 | Wave 6: 0.65 (Previously was 1.17)
+        const baseSpeed = Math.min(4.5, 0.35 + (wave * 0.06));
+        const virusSpeed = Math.min(5.5, 0.45 + (wave * 0.10));
 
-        // Spawn interval reduction (Reduced from 150 to 100 per wave)
-        const spawnInterval = Math.max(1000, 2800 - (wave * 100));
+        // Spawn interval reduction (Start slower: 3.2s)
+        const spawnInterval = Math.max(1200, 3200 - (wave * 80));
 
         return { enemiesPerWave, baseSpeed, virusSpeed, spawnInterval };
     }
