@@ -2165,6 +2165,22 @@
         });
     });
 
+    function resetRacing() {
+        if (typeof racingState !== 'undefined') racingState.active = false;
+    }
+    function stopArtillery() {
+        if (typeof neonState !== 'undefined') neonState.active = false;
+    }
+    function stopGalaxy() {
+        if (typeof galaxyState !== 'undefined') {
+            galaxyState.active = false;
+            if (galaxyState.animationId) {
+                cancelAnimationFrame(galaxyState.animationId);
+                galaxyState.animationId = null;
+            }
+        }
+    }
+
     // ======================== SCREEN MANAGEMENT ========================
     function showScreen(screenId) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
