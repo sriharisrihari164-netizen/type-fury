@@ -3410,15 +3410,11 @@
         if (isNewGame) {
             galaxyState.score = 0;
             galaxyState.totalScore = 0;
-            galaxyState.lives = 3;
             galaxyState.wave = 1;
-            galaxyState.startTime = Date.now();
-            galaxyState.charsTyped = 0;
         } else {
             // Case: Retry or Next Level
             // If lives were 0, it's a retry of the current wave
             if (galaxyState.lives <= 0) {
-                galaxyState.lives = 3; // Reset lives for retry
                 galaxyState.score = 0; // Wave score resets
             } else {
                 // Natural progression: Add to total
@@ -3426,6 +3422,11 @@
                 galaxyState.score = 0;
             }
         }
+        
+        // Always reset these for accurate WPM and Wave tracking
+        galaxyState.lives = 3;
+        galaxyState.startTime = Date.now();
+        galaxyState.charsTyped = 0;
         
         // Always reset these for a new session attempt
         galaxyState.enemies = [];
@@ -3874,8 +3875,17 @@
     }
 
     function endGalaxy() {
+        // Halt everything immediately
         galaxyState.active = false;
-        
+        if (galaxyState.animationId) {
+            cancelAnimationFrame(galaxyState.animationId);
+            galaxyState.animationId = null;
+        }
+
+        // Final WPM calc (ensure the display has the latest possible data)
+        const elapsed = (Date.now() - galaxyState.startTime) / 60000;
+        if (elapsed > 0) galaxyState.wpm = Math.round((galaxyState.charsTyped / 5) / elapsed);
+
         // Save highscore against Total Score
         const finalTotal = galaxyState.totalScore + galaxyState.score;
         if (finalTotal > galaxyState.highScore) {
@@ -3883,10 +3893,16 @@
             localStorage.setItem('typefury_galaxy_highscore', galaxyState.highScore);
         }
 
+        // Clean UI and then show results to ensure no "stuck" mission cards
+        clearGalaxyUI();
         document.getElementById('galResScore').textContent = finalTotal;
         document.getElementById('galResWave').textContent = galaxyState.wave;
         document.getElementById('galResWPM').textContent = galaxyState.wpm;
-        document.getElementById('galResult').classList.add('show');
+        
+        // Explicitly show results
+        const resOverlay = document.getElementById('galResult');
+        resOverlay.classList.remove('hidden'); // Double check if hidden was used
+        resOverlay.classList.add('show');
     }
 
     /* ================================================================
