@@ -3825,8 +3825,24 @@
     if (artResRestart) {
         artResRestart.addEventListener('click', () => {
             const overlay = document.getElementById('artResult');
-            if (overlay) overlay.classList.remove('show');
+            if (overlay) {
+                overlay.classList.remove('show');
+                overlay.classList.add('hidden');
+            }
             launchArtillery();
+        });
+    }
+
+    const artResMenu = document.getElementById('aResMenu');
+    if (artResMenu) {
+        artResMenu.addEventListener('click', () => {
+            const overlay = document.getElementById('artResult');
+            if (overlay) {
+                overlay.classList.remove('show');
+                overlay.classList.add('hidden');
+            }
+            neonState.active = false;
+            showScreen('mainMenu');
         });
     }
 
