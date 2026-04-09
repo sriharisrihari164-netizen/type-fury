@@ -840,6 +840,86 @@ html, body {
     animation: shakeAnim 0.2s infinite;
 }
 
+/* --- Galaxy HUD Simple Redesign --- */
+.art-header-simple {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 15px;
+    width: 100%;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.art-box {
+    background: rgba(15, 15, 25, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px 20px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    pointer-events: auto;
+    min-width: 100px;
+    transition: transform 0.3s ease;
+}
+
+.art-box:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.art-label-small {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 10px;
+    font-weight: 900;
+    font-family: var(--font-display);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.art-val-small {
+    font-size: 20px;
+    font-weight: 900;
+    font-family: var(--font-display);
+    line-height: 1.1;
+}
+
+.art-hearts-simple {
+    color: #ff2d55;
+    font-size: 18px;
+    text-shadow: 0 0 10px rgba(255, 45, 85, 0.5);
+    line-height: 1;
+}
+
+.art-close-simple {
+    margin-left: auto;
+    background: rgba(255, 45, 85, 0.1);
+    border: 1px solid #ff2d55;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ff2d55;
+    font-size: 20px;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 0 15px rgba(255, 45, 85, 0.3);
+}
+
+.art-close-simple:hover {
+    background: #ff2d55;
+    color: #fff;
+    transform: rotate(90deg) scale(1.15);
+    box-shadow: 0 0 30px rgba(255, 45, 85, 0.6);
+}
+
 .galaxy-img {
     filter: drop-shadow(0 0 20px var(--accent-glow));
 }
