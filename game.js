@@ -3185,9 +3185,9 @@
         // Words to type to clear the wave
         const enemiesPerWave = 5 + Math.floor(wave * 1.5);
         
-        // Speed scaling (Softer initial speed and capped at lower max)
-        const baseSpeed = Math.min(2.5, 0.35 + (wave * 0.035));
-        const virusSpeed = Math.min(3.0, 0.12 + (wave * 0.045));
+        // Speed scaling (More aggressive progression)
+        const baseSpeed = Math.min(6.5, 0.6 + (wave * 0.22));
+        const virusSpeed = Math.min(7.5, 0.8 + (wave * 0.3));
 
         // Spawn interval gets tighter as waves progress
         const spawnInterval = Math.max(800, 2500 - (wave * 150));
@@ -3223,6 +3223,7 @@
     const galaxyState = {
         active: false,
         score: 0,
+        highScore: parseInt(localStorage.getItem('typefury_galaxy_highscore')) || 0,
         wave: parseInt(localStorage.getItem('typefury_galaxy_wave')) || 1,
         wpm: 0,
         lives: 3,
@@ -3343,9 +3344,26 @@
 
     function startGalaxyOps() {
         showScreen('galaxyScreen');
-        document.getElementById('galStartOverlay').classList.remove('hidden');
-        // Ensure we show the current wave from state
+        // Update mission card with current stats
         document.getElementById('galLevelDisplay').textContent = `WAVE ${galaxyState.wave}`;
+        
+        const cardParent = document.querySelector('#galStartOverlay .art-opt-group');
+        if (cardParent) {
+            let scoreEl = document.getElementById('galStartScore');
+            if (!scoreEl) {
+                scoreEl = document.createElement('div');
+                scoreEl.id = 'galStartScore';
+                scoreEl.style.fontSize = '16px';
+                scoreEl.style.color = '#10ff82';
+                scoreEl.style.marginTop = '10px';
+                scoreEl.style.fontWeight = 'bold';
+                scoreEl.style.fontFamily = 'var(--font-mono)';
+                cardParent.appendChild(scoreEl);
+            }
+            scoreEl.textContent = `SYSTEM SCORE: ${galaxyState.score} | BEST: ${galaxyState.highScore}`;
+        }
+
+        document.getElementById('galStartOverlay').classList.remove('hidden');
         galaxyState.active = false; 
     }
 
@@ -3509,16 +3527,21 @@
 
     function updateGalaxyTypingArea() {
         const container = document.getElementById('galTypingBox');
-        container.innerHTML = '';
-        if (!galaxyState.currentWord) return;
+        if (!galaxyState.currentWord) {
+            container.innerHTML = '';
+            return;
+        }
 
+        const fragment = document.createDocumentFragment();
         for (let i = 0; i < galaxyState.currentWord.length; i++) {
             const char = galaxyState.currentWord[i];
             const div = document.createElement('div');
             div.className = 'word-char' + (i < galaxyState.typedIndex ? ' typed' : (i === galaxyState.typedIndex ? ' current' : ''));
             div.textContent = char;
-            container.appendChild(div);
+            fragment.appendChild(div);
         }
+        container.innerHTML = '';
+        container.appendChild(fragment);
     }
 
     function fireGalaxyProjectile(target, isKillShot = false) {
@@ -3703,7 +3726,7 @@
              // 2. No enemies left on screen
              if (galaxyState.wordsSpawnedInWave >= galaxyState.enemiesInWave && galaxyState.enemies.length === 0 && !galaxyState.levelTransition) {
                  galaxyState.levelTransition = true;
-                 galaxyState.levelTransitionTimer = 120; // ~2 seconds for smoother transition
+                 galaxyState.levelTransitionTimer = 75; // ~1.25 seconds for snappier transition
                  playSound('levelUp');
                  
                  // Clean up session state for next wave launcher
@@ -3792,6 +3815,13 @@
 
     function endGalaxy() {
         galaxyState.active = false;
+        
+        // Save highscore
+        if (galaxyState.score > galaxyState.highScore) {
+            galaxyState.highScore = galaxyState.score;
+            localStorage.setItem('typefury_galaxy_highscore', galaxyState.highScore);
+        }
+
         document.getElementById('galResScore').textContent = galaxyState.score;
         document.getElementById('galResWave').textContent = galaxyState.wave;
         document.getElementById('galResWPM').textContent = galaxyState.wpm;
