@@ -3227,16 +3227,16 @@
        ================================================================ */
     
         function getGalaxyWaveData(wave) {
-        // Words to type to clear the wave (Even slower growth for comfort)
-        const enemiesPerWave = 3 + Math.floor(wave * 0.7);
+        // Words to type to clear the wave (Slower word count growth)
+        const enemiesPerWave = 3 + Math.floor(wave * 0.6);
         
-        // Speed scaling (Beginner Friendly)
-        // Wave 1: 0.32 | Wave 10: 0.68 (Previously was 0.65 at wave 6)
-        const baseSpeed = Math.min(4.5, 0.32 + (wave * 0.04));
-        const virusSpeed = Math.min(5.5, 0.40 + (wave * 0.07));
+        // Speed scaling (Slow Poison: Extremely gradual)
+        // Wave 1: 0.30 | It takes ~25 waves to double in speed
+        const baseSpeed = 0.30 + (wave * 0.012);
+        const virusSpeed = 0.40 + (wave * 0.018);
 
-        // Spawn interval reduction (Start slower: 3.5s)
-        const spawnInterval = Math.max(1500, 3500 - (wave * 60));
+        // Spawn interval reduction (Start slower: 4s)
+        const spawnInterval = Math.max(1800, 4000 - (wave * 50));
 
         return { enemiesPerWave, baseSpeed, virusSpeed, spawnInterval };
     }
@@ -3690,7 +3690,15 @@
             const centerX = w/2;
             const shipY = h - 220;
 
-            ctx.clearRect(0,0,w,h);
+            // Robust Clear: Overscan by 10px to ensure total surface cache clear
+            ctx.clearRect(-10, -10, w + 20, h + 20);
+
+            // GALAXY UI Artifact FIX: Clipping Mask
+            // We hide the top 5 pixels to catch and block edge-drawing flickers.
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 5, w, h);
+            ctx.clip();
 
         // --- DRAW STARFIELD (Simplified for performance) ---
         ctx.fillStyle = '#fff';
