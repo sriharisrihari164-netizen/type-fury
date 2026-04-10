@@ -29,6 +29,11 @@
         masterGain: null,
         engineOsc: null,
         engineGain: null,
+        musicEnabled: true,
+        musicGain: null,
+        musicOscs: [],
+        musicInterval: null,
+        musicBeat: 0,
 
         init() {
             if (this.ctx) return;
@@ -41,6 +46,10 @@
                 this.engineGain = this.ctx.createGain();
                 this.engineGain.gain.value = 0;
                 this.engineGain.connect(this.masterGain);
+
+                this.musicGain = this.ctx.createGain();
+                this.musicGain.gain.value = 0;
+                this.musicGain.connect(this.masterGain);
             } catch (e) {
                 console.error("Audio Context Init Failed", e);
             }
@@ -49,16 +58,23 @@
         toggle() {
             this.enabled = !this.enabled;
             if (this.masterGain) {
-                this.masterGain.gain.value = this.enabled ? 0.3 : 0;
+                this.masterGain.gain.setTargetAtTime(this.enabled ? 0.3 : 0, this.ctx.currentTime, 0.1);
             }
             return this.enabled;
+        },
+
+        toggleMusic() {
+            this.musicEnabled = !this.musicEnabled;
+            if (this.musicGain) {
+                this.musicGain.gain.setTargetAtTime(this.musicEnabled ? 0.15 : 0, this.ctx.currentTime, 0.5);
+            }
+            return this.musicEnabled;
         },
 
         playTone(freq, type, duration, volume = 0.1) {
             if (!this.ctx || !this.enabled) return;
             const osc = this.ctx.createOscillator();
             const g = this.ctx.createGain();
-            osc.className = "sfx-osc";
             osc.type = type;
             osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
             g.gain.setValueAtTime(volume, this.ctx.currentTime);
@@ -72,9 +88,17 @@
         playClick() { this.playTone(800, 'sine', 0.05, 0.05); },
         playError() { this.playTone(150, 'sawtooth', 0.2, 0.1); },
         playLaser() { this.playTone(Math.random() * 200 + 400, 'square', 0.15, 0.03); },
-        playLevelUp() { this.playTone(880, 'sine', 0.3, 0.1); setTimeout(() => this.playTone(1320, 'sine', 0.4, 0.1), 100); },
-        playExplosion() { this.playTone(60, 'sawtooth', 0.5, 0.2); },
-        
+        playLevelUp() { 
+            this.playTone(880, 'sine', 0.3, 0.1); 
+            setTimeout(() => this.playTone(1320, 'sine', 0.4, 0.1), 100); 
+        },
+        playExplosion() { this.playTone(60, 'sawtooth', 0.8, 0.3); },
+        playComboBreaker() {
+            const now = this.ctx.currentTime;
+            this.playTone(200, 'sawtooth', 0.2, 0.1);
+            setTimeout(() => this.playTone(100, 'sawtooth', 0.3, 0.1), 100);
+        },
+
         startEngine() {
             if (!this.ctx || this.engineOsc) return;
             this.engineOsc = this.ctx.createOscillator();
@@ -103,6 +127,56 @@
             if (!this.engineOsc) return;
             const target = 50 + (wpm * 0.4);
             this.engineOsc.frequency.setTargetAtTime(target, this.ctx.currentTime, 0.1);
+        },
+
+        startMusic(intensity = 0) {
+            if (!this.ctx || this.musicInterval) return;
+            this.musicGain.gain.setTargetAtTime(this.musicEnabled ? 0.15 : 0, this.ctx.currentTime, 1.0);
+            
+            this.musicInterval = setInterval(() => {
+                if (!this.enabled) return;
+                this.musicBeat++;
+                const now = this.ctx.currentTime;
+                
+                // Bass Pulse (Every beat)
+                const bass = this.ctx.createOscillator();
+                const bg = this.ctx.createGain();
+                bass.type = 'sine';
+                bass.frequency.setValueAtTime(55, now); // A1
+                if (this.musicBeat % 4 === 0) bass.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+                
+                bg.gain.setValueAtTime(0.2, now);
+                bg.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                
+                bass.connect(bg);
+                bg.connect(this.musicGain);
+                bass.start(now);
+                bass.stop(now + 0.5);
+
+                // Tech Pulse (Off-beats)
+                if (this.musicBeat % 2 === 0) {
+                    const tech = this.ctx.createOscillator();
+                    const tg = this.ctx.createGain();
+                    tech.type = 'square';
+                    tech.frequency.setValueAtTime(intensity > 5 ? 220 : 110, now);
+                    tg.gain.setValueAtTime(0.02, now);
+                    tg.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                    tech.connect(tg);
+                    tg.connect(this.musicGain);
+                    tech.start(now);
+                    tech.stop(now + 0.1);
+                }
+            }, 500 - Math.min(300, intensity * 20));
+        },
+
+        stopMusic() {
+            if (this.musicInterval) {
+                clearInterval(this.musicInterval);
+                this.musicInterval = null;
+            }
+            if (this.musicGain) {
+                this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.5);
+            }
         }
     };
     SoundFX.init();
@@ -2238,6 +2312,9 @@
     });
 
     [btnRacing, btnArtillery, btnGalaxy].forEach(btn => {
+        btn.addEventListener('mouseenter', () => {
+            SoundFX.playClick();
+        });
         btn.addEventListener('mouseleave', () => {
             if (document.getElementById('mainMenu').classList.contains('active')) {
                 setBg('main');
@@ -2375,6 +2452,7 @@
         document.getElementById('racingLevelStr').textContent = racingState.level;
         SoundFX.playLevelUp(); // Starting beep
         SoundFX.startEngine();
+        SoundFX.startMusic(0); 
         
         const lvlData = getRacingLevelData(racingState.level);
         
@@ -2573,6 +2651,7 @@
         racingState.active = false;
         racingState.finished = true;
         SoundFX.stopEngine();
+        SoundFX.stopMusic();
         
         // Calc position
         let pos = 1;
@@ -3092,6 +3171,8 @@
         document.getElementById('artResult').classList.add('hidden');
         document.getElementById('artStartOverlay').classList.remove('hidden');
         document.getElementById('artCurrentLevelDisplay').textContent = 'SYSTEM CORE: READY';
+        SoundFX.playLevelUp();
+        SoundFX.startMusic(1); // Higher intensity for Neon Leak
         initArtilleryCanvas();
         neonState.active = false; // Wait for "Initiate" button
     }
@@ -3177,6 +3258,7 @@
             } else {
                 neonState.combo = 0;
                 neonState.isFlowState = false;
+                SoundFX.playComboBreaker();
                 neonState.weakKeys[w.text[w.typed]] = (neonState.weakKeys[w.text[w.typed]] || 0) + 1;
                 
                 // Add jitter to the word on miss
@@ -3499,7 +3581,7 @@
             res.classList.remove('hidden');
             res.classList.add('show');
         }
-        
+        SoundFX.stopMusic();
         playSound('gameOver');
     }
 
@@ -3742,6 +3824,7 @@
         }
 
         galaxyState.active = true;
+        SoundFX.startMusic(3); // Most intense for Galaxy Ops
         nextGalaxyWave(isNewGame);
     }
 
@@ -3943,6 +4026,7 @@
                 box.classList.add('shake');
                 setTimeout(() => box.classList.remove('shake'), 200);
                 galaxyState.vibration = 5;
+                if (galaxyState.streak > 5) SoundFX.playComboBreaker();
                 galaxyState.streak = 0; // RESET STREAK on mistake
             }
         } catch (err) {
@@ -4348,10 +4432,22 @@
         });
     }
 
+    const musicToggle = document.getElementById('musicToggle');
+    const musicStatus = document.getElementById('musicStatus');
+    if (musicToggle && musicStatus) {
+        musicToggle.addEventListener('click', () => {
+            const enabled = SoundFX.toggleMusic();
+            musicStatus.textContent = enabled ? 'ON' : 'OFF';
+            musicStatus.style.color = enabled ? 'var(--accent)' : '#ff4757';
+            SoundFX.playClick();
+        });
+    }
+
     function stopAllModes() {
         // Stop Racing
         racingState.active = false;
         SoundFX.stopEngine();
+        SoundFX.stopMusic();
 
         // Stop Galaxy
         galaxyState.active = false;
@@ -4404,6 +4500,7 @@
     });
     document.getElementById('rResMenu').addEventListener('click', () => {
         SoundFX.stopEngine();
+        SoundFX.stopMusic();
         showScreen('mainMenu');
     });
 
