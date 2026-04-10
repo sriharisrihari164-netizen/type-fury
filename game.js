@@ -5,56 +5,123 @@
 
 (function () {
     'use strict';
+    
+    // Polyfill: Canvas roundRect for older browsers
+    if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+            if (w < 2 * r) r = w / 2;
+            if (h < 2 * r) r = h / 2;
+            this.beginPath();
+            this.moveTo(x + r, y);
+            this.arcTo(x + w, y, x + w, y + h, r);
+            this.arcTo(x + w, y + h, x, y + h, r);
+            this.arcTo(x, y + h, x, y, r);
+            this.arcTo(x, y, x + w, y, r);
+            this.closePath();
+            return this;
+        };
+    }
 
-    /* ===== AUDIO SYSTEM ===== */
+    /* ===== SOUND ENGINE (Web Audio API) ===== */
+    const SoundFX = {
+        ctx: null,
+        enabled: true,
+        masterGain: null,
+        engineOsc: null,
+        engineGain: null,
 
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function playSound(type) {
-        if (!audioCtx) return;
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const osc = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        osc.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
+        init() {
+            if (this.ctx) return;
+            try {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.connect(this.ctx.destination);
+                this.masterGain.gain.value = 0.3;
+                
+                this.engineGain = this.ctx.createGain();
+                this.engineGain.gain.value = 0;
+                this.engineGain.connect(this.masterGain);
+            } catch (e) {
+                console.error("Audio Context Init Failed", e);
+            }
+        },
+
+        toggle() {
+            this.enabled = !this.enabled;
+            if (this.masterGain) {
+                this.masterGain.gain.value = this.enabled ? 0.3 : 0;
+            }
+            return this.enabled;
+        },
+
+        playTone(freq, type, duration, volume = 0.1) {
+            if (!this.ctx || !this.enabled) return;
+            const osc = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            osc.className = "sfx-osc";
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            g.gain.setValueAtTime(volume, this.ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.00001, this.ctx.currentTime + duration);
+            osc.connect(g);
+            g.connect(this.masterGain);
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        },
+
+        playClick() { this.playTone(800, 'sine', 0.05, 0.05); },
+        playError() { this.playTone(150, 'sawtooth', 0.2, 0.1); },
+        playLaser() { this.playTone(Math.random() * 200 + 400, 'square', 0.15, 0.03); },
+        playLevelUp() { this.playTone(880, 'sine', 0.3, 0.1); setTimeout(() => this.playTone(1320, 'sine', 0.4, 0.1), 100); },
+        playExplosion() { this.playTone(60, 'sawtooth', 0.5, 0.2); },
         
-        if (type === 'fire') {
-            osc.type = 'square';
-            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
-            gainNode.gain.setValueAtTime(0.02, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-            osc.start(); osc.stop(audioCtx.currentTime + 0.1);
-        } else if (type === 'hit') {
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(200, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.2);
-            gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
-            osc.start(); osc.stop(audioCtx.currentTime + 0.2);
-        } else if (type === 'destroy') {
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.4);
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
-            osc.start(); osc.stop(audioCtx.currentTime + 0.4);
-        } else if (type === 'levelUp') {
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-            osc.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.2);
-            osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.4);
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-            osc.start(); osc.stop(audioCtx.currentTime + 0.6);
+        startEngine() {
+            if (!this.ctx || this.engineOsc) return;
+            this.engineOsc = this.ctx.createOscillator();
+            this.engineOsc.type = 'sawtooth';
+            this.engineOsc.frequency.value = 50; 
+            const lowpass = this.ctx.createBiquadFilter();
+            lowpass.type = 'lowpass';
+            lowpass.frequency.value = 150;
+            this.engineOsc.connect(lowpass);
+            lowpass.connect(this.engineGain);
+            this.engineOsc.start();
+            this.engineGain.gain.setTargetAtTime(0.05, this.ctx.currentTime, 0.1);
+        },
+
+        stopEngine() {
+            if (this.engineGain) this.engineGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
+            setTimeout(() => {
+                if (this.engineOsc) {
+                    this.engineOsc.stop();
+                    this.engineOsc = null;
+                }
+            }, 200);
+        },
+
+        setEnginePitch(wpm) {
+            if (!this.engineOsc) return;
+            const target = 50 + (wpm * 0.4);
+            this.engineOsc.frequency.setTargetAtTime(target, this.ctx.currentTime, 0.1);
+        }
+    };
+    SoundFX.init();
+
+    function playTypingSound() { SoundFX.playClick(); }
+    function playArtilleryShot() { SoundFX.playLaser(); }
+
+    function playSound(type) {
+        if (!SoundFX.enabled) return;
+        switch (type) {
+            case 'hit': SoundFX.playLaser(); break;
+            case 'levelUp': SoundFX.playLevelUp(); break;
+            case 'error': SoundFX.playError(); break;
+            case 'gameOver': SoundFX.playExplosion(); break;
+            case 'click': SoundFX.playClick(); break;
         }
     }
 
-    function playTypingSound() {
-        playSound('fire');
-    }
-    function playArtilleryShot() {
-        playSound('hit');
-    }
+
 
     /* ===== WORD LISTS ===== */
     const PARAGRAPHS = [
@@ -2103,21 +2170,34 @@
 
     /* ===== LOCAL STORAGE ===== */
     function loadProgress() {
+        let p = { bestWPM: 0, bestAcc: 0 };
         try {
-            return JSON.parse(localStorage.getItem('typefury_progress')) || { bestWPM: 0, bestAcc: 0 };
-        } catch { return { bestWPM: 0, bestAcc: 0 }; }
+            const saved = JSON.parse(localStorage.getItem('typefury_progress'));
+            if (saved && typeof saved === 'object') {
+                p.bestWPM = saved.bestWPM || 0;
+                p.bestAcc = saved.bestAcc || 0;
+            }
+        } catch (e) { console.warn("Error loading progress:", e); }
+        return p;
     }
     function saveProgress(data) {
+        if (!data) return;
         const cur = loadProgress();
-        if (data.wpm > cur.bestWPM) cur.bestWPM = Math.round(data.wpm);
-        if (data.acc > cur.bestAcc) cur.bestAcc = Math.round(data.acc);
+        const wpm = Math.round(data.wpm || 0);
+        const acc = Math.round(data.acc || 0);
+
+        if (wpm > (cur.bestWPM || 0)) cur.bestWPM = wpm;
+        if (acc > (cur.bestAcc || 0)) cur.bestAcc = acc;
+
         localStorage.setItem('typefury_progress', JSON.stringify(cur));
         updateMenuStats();
     }
     function updateMenuStats() {
         const p = loadProgress();
-        document.getElementById('menuBestWPM').textContent = p.bestWPM;
-        document.getElementById('menuBestAcc').textContent = p.bestAcc + '%';
+        const wpmEl = document.getElementById('menuBestWPM');
+        const accEl = document.getElementById('menuBestAcc');
+        if (wpmEl) wpmEl.textContent = p.bestWPM || 0;
+        if (accEl) accEl.textContent = (p.bestAcc || 0) + '%';
     }
 
     // ======================== BACKGROUND MANAGEMENT ========================
@@ -2197,6 +2277,7 @@
             resetRacing();
             stopArtillery();
             stopGalaxy();
+            updateMenuStats(); // Always refresh stats when showing menu
         }
     }
 
@@ -2256,10 +2337,10 @@
         typedChars: 0,
         startTime: 0,
         cars: [
-            { id: 'prag', name: 'Prag', color: '#03a9f4', yOff: -0.3, progress: 0, speed: 0, isPlayer: true, imgFile: 'racing_car_blue.png' },
-            { id: 'skeb', name: 'Skeb', color: '#fbc02d', yOff: -0.1, progress: 0, speed: 0, isPlayer: false, imgFile: 'racing_car_yellow.png' },
-            { id: 'com2', name: 'COM 2', color: '#e53935', yOff: 0.1, progress: 0, speed: 0, isPlayer: false, imgFile: 'racing_car_green.png' },
-            { id: 'com3', name: 'COM 3', color: '#ffffff', yOff: 0.3, progress: 0, speed: 0, isPlayer: false, imgFile: 'racing_car_grey.png' }
+            { id: 'player', name: 'U', color: '#00e5ff', yOff: -0.2, progress: 0, speed: 0, isPlayer: true, imgFile: 'racing_car_blue.png', particles: [] },
+            { id: 'storm', name: 'STORM', color: '#fbc02d', yOff: 0, progress: 0, speed: 0, isPlayer: false, imgFile: 'racing_car_yellow.png', particles: [] },
+            { id: 'vortex', name: 'VORTEX', color: '#e53935', yOff: 0.15, progress: 0, speed: 0, isPlayer: false, imgFile: 'racing_car_green.png', particles: [] },
+            { id: 'pulse', name: 'PULSE', color: '#ffffff', yOff: 0.3, progress: 0, speed: 0, isPlayer: false, imgFile: 'racing_car_grey.png', particles: [] }
         ],
         images: {}, // to store HTMLImageElements
         scrollOffset: 0,
@@ -2292,6 +2373,8 @@
     function launchRacing() {
         document.getElementById('racingStartOverlay').classList.add('hidden');
         document.getElementById('racingLevelStr').textContent = racingState.level;
+        SoundFX.playLevelUp(); // Starting beep
+        SoundFX.startEngine();
         
         const lvlData = getRacingLevelData(racingState.level);
         
@@ -2430,10 +2513,10 @@
         if (!racingState.startTime) racingState.startTime = Date.now();
         racingState.totalKeystrokes++;
 
-        const expected = word[racingState.typedChars];
-        if (e.key.toUpperCase() === expected) {
+        if (e.key.toUpperCase() === word[racingState.typedChars]) {
             racingState.typedChars++;
             racingState.correctChars++;
+            SoundFX.playClick();
             racingState.wrongFlash = 0;
             racingState.vibration = 2; // Subtle shake on hit
 
@@ -2454,6 +2537,8 @@
                 }
             }
         } else {
+            racingState.accuracy = Math.round((racingState.correctChars / (racingState.totalKeystrokes || 1)) * 100);
+            SoundFX.playError();
             racingState.wrongFlash = 15;
             racingState.vibration = 8; // Stronger shake on error
             document.getElementById('racingWordTiles').classList.add('shake');
@@ -2484,7 +2569,10 @@
     }
 
     function checkRacingFinish(outOfTime = false) {
-        if(racingState.finished) return;
+        if (racingState.finished) return;
+        racingState.active = false;
+        racingState.finished = true;
+        SoundFX.stopEngine();
         
         // Calc position
         let pos = 1;
@@ -2547,24 +2635,37 @@
         const img = racingState.images[carObj.imgFile];
         if (img && img.complete) {
             // All cars except COM3 point RIGHT with 90deg rotation
-            // COM3 source is reversed (facing down), so we rotate 270deg (or -90deg)
-            if (carObj.id === 'com3') {
+            if (carObj.id === 'pulse') {
                 ctx.rotate(Math.PI * 1.5);
             } else {
                 ctx.rotate(Math.PI / 2); 
             }
-            const finalW = 54; 
-            const finalH = 94;
+            const finalW = 75; 
+            const finalH = 130;
             ctx.drawImage(img, -finalW/2, -finalH/2, finalW, finalH);
+            
+            // Draw Blue Exhaust / Nitro Flare if fast (Player only)
+            if (carObj.isPlayer && racingState.wpm > 60) {
+                const flareSize = (racingState.wpm - 60) * 0.4;
+                ctx.fillStyle = 'rgba(0, 229, 255, 0.5)';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#00e5ff';
+                ctx.beginPath();
+                ctx.arc(-finalW/4, finalH/2, 10 + flareSize, 0, Math.PI*2);
+                ctx.arc(finalW/4, finalH/2, 10 + flareSize, 0, Math.PI*2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
         } else {
             // Fallback Vector Drawing
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
-            ctx.fillRect(-22, -12, 44, 28);
+            ctx.fillRect(-30, -15, 60, 35);
             ctx.fillStyle = carObj.color;
             ctx.beginPath();
-            ctx.roundRect(-20, -10, 40, 20, 5);
+            ctx.roundRect(-28, -14, 56, 28, 5);
             ctx.fill();
             ctx.fillStyle = '#222';
+            ctx.beginPath();
             ctx.roundRect(-5, -8, 10, 16, 2);
             ctx.fill();
         }
@@ -2574,175 +2675,212 @@
 
     function racingLoop() {
         if (!racingState.active) return;
-        const ctx = racingCtx;
-        const w = racingCW / devicePixelRatio;
-        const h = racingCH / devicePixelRatio;
-
-        ctx.clearRect(0, 0, w, h);
         
-        // Handle Vibration (Shake)
-        if(racingState.vibration > 0) {
-            const sx = (Math.random()-0.5) * racingState.vibration;
-            const sy = (Math.random()-0.5) * racingState.vibration;
-            ctx.save();
-            ctx.translate(sx, sy);
-            racingState.vibration *= 0.85; // Decay
-        }
+        // Request next frame EARLY to maintain loop even on minor errors
+        requestAnimationFrame(racingLoop);
 
-        // Base scroll speed depends on player's WPM, but also base scrolling
-        const currentSpeed = 5 + (racingState.wpm * 0.1);
-        racingState.scrollOffset += currentSpeed;
+        try {
+            const ctx = racingCtx;
+            if (!ctx) return; 
+            const w = racingCW / devicePixelRatio;
+            const h = racingCH / devicePixelRatio;
 
-        // Update AI Progress
-        if(racingState.startTime && !racingState.finished) {
-            const elapsedMins = (Date.now() - racingState.startTime) / 60000;
-            const lvlData = getRacingLevelData(racingState.level);
-            
-            racingState.cars.forEach((c) => {
-                if(!c.isPlayer) {
-                    // WPM * 5 chars per minute
-                    const charsTyped = c.speed * 5 * elapsedMins;
-                    const totalChars = lvlData.wordsToWin * 5; // approx
-                    c.progress = Math.min(charsTyped / totalChars, 1);
-                }
-            });
-            
-            calcStats();
-            
-            // Render progress track
-            const dots = document.querySelectorAll('.track-car-dot');
-            racingState.cars.forEach((c, i) => {
-                const marker = dots[i];
-                if(marker) marker.style.left = (c.progress * 98) + '%';
-            });
-            
-            // Current position
-            let pos = 1;
-            const player = racingState.cars.find(c => c.isPlayer);
-            racingState.cars.forEach(c => {
-                if(!c.isPlayer && c.progress > player.progress) pos++;
-            });
-            document.getElementById('racingPosStr').textContent = pos + '/4';
-            
-            // Check if any AI finished
-            if(!racingState.finished && racingState.cars.some(c => !c.isPlayer && c.progress >= 1)) {
-                checkRacingFinish();
+            ctx.clearRect(0, 0, w, h);
+        
+            // Handle Vibration (Shake)
+            let vibActive = false;
+            if(racingState.vibration > 0) {
+                const sx = (Math.random()-0.5) * racingState.vibration;
+                const sy = (Math.random()-0.5) * racingState.vibration;
+                ctx.save();
+                ctx.translate(sx, sy);
+                racingState.vibration *= 0.85; // Decay
+                vibActive = true;
             }
-        }
 
-        // Draw Grass (top and bottom borders)
-        ctx.fillStyle = '#6ab04c';
-        ctx.fillRect(0, 0, w, h*0.2);
-        ctx.fillRect(0, h*0.8, w, h*0.2);
-        
-        // Draw Road
-        ctx.fillStyle = '#2f3542';
-        ctx.fillRect(0, h*0.2, w, h*0.6);
-        
-        // Draw Lanes (3 dividers for 4 lanes)
-        const laneHeight = (h*0.6) / 4;
-        ctx.strokeStyle = '#57606f';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([20, 20]);
-        for(let i=1; i<4; i++) {
-            ctx.beginPath();
-            ctx.moveTo(- (racingState.scrollOffset % 40), h*0.2 + i*laneHeight);
-            ctx.lineTo(w, h*0.2 + i*laneHeight);
-            ctx.stroke();
-        }
-        ctx.setLineDash([]);
-        
-        // Draw Bushes (Parallax)
-        ctx.fillStyle = '#218c74';
-        for(let i=0; i<10; i++) {
-            const bx = ((i*150 - racingState.scrollOffset*0.8) % (w+100)) - 50;
-            ctx.beginPath();
-            ctx.arc(bx, h*0.08 + Math.sin(i)*20, 30, 0, Math.PI*2);
-            ctx.fill();
-            
-            const bx2 = ((i*180 - racingState.scrollOffset*0.8) % (w+100)) - 50;
-            ctx.beginPath();
-            ctx.arc(bx2, h*0.92 + Math.cos(i)*20, 35, 0, Math.PI*2);
-            ctx.fill();
-        }
+            // Apply Speed Blur Filter if fast
+            if (racingState.wpm > 80) {
+                const blurAmt = Math.min(2, (racingState.wpm - 80) / 20);
+                ctx.filter = `blur(${blurAmt}px)`;
+            }
 
-        const basePlayerX = w * 0.3;
-        const playerProg = racingState.cars.find(c => c.isPlayer).progress;
+            // Base scroll speed depends on player's WPM, but also base scrolling
+            const currentSpeed = 5 + (racingState.wpm * 0.1);
+            racingState.scrollOffset += currentSpeed;
+            
+            // Update Sound
+            SoundFX.setEnginePitch(racingState.wpm);
 
-        // Draw Finish Line (Checkered)
-        const relFinish = 1 - playerProg;
-        const finishX = basePlayerX + (relFinish * w * 0.8);
-        if (finishX > 0 && finishX < w + 200) {
-            ctx.fillStyle = '#000';
-            const finishWidth = 40;
-            ctx.fillRect(finishX, h*0.2, finishWidth, h*0.6);
+            // Update AI Progress
+            if(racingState.startTime && !racingState.finished) {
+                const elapsedMins = (Date.now() - racingState.startTime) / 60000;
+                const lvlData = getRacingLevelData(racingState.level);
+                
+                racingState.cars.forEach((c) => {
+                    if(!c.isPlayer) {
+                        const charsTyped = c.speed * 5 * elapsedMins;
+                        const totalChars = lvlData.wordsToWin * 5; 
+                        c.progress = Math.min(charsTyped / totalChars, 1);
+                    }
+                });
+                
+                calcStats();
+                
+                // Render progress track
+                const dots = document.querySelectorAll('.track-car-dot');
+                racingState.cars.forEach((c, i) => {
+                    const marker = dots[i];
+                    if(marker) marker.style.left = (c.progress * 98) + '%';
+                });
+                
+                // Current position
+                let pos = 1;
+                const player = racingState.cars.find(c => c.isPlayer);
+                if (player) {
+                    racingState.cars.forEach(c => {
+                        if(!c.isPlayer && c.progress > player.progress) pos++;
+                    });
+                }
+                document.getElementById('racingPosStr').textContent = pos + '/4';
+                
+                if(!racingState.finished && racingState.cars.some(c => !c.isPlayer && c.progress >= 1)) {
+                    checkRacingFinish();
+                }
+            }
+
+            // Draw Grass (top and bottom borders)
+            ctx.fillStyle = '#6ab04c';
+            ctx.fillRect(0, 0, w, h*0.2);
+            ctx.fillRect(0, h*0.8, w, h*0.2);
             
-            ctx.fillStyle = '#ffffff';
-            const numCols = 2; // Two columns of checks
-            const sqW = finishWidth / numCols;
-            const numRows = 10;
-            const sqH = (h*0.6) / numRows;
+            // Draw Road
+            ctx.fillStyle = '#2f3542';
+            ctx.fillRect(0, h*0.2, w, h*0.6);
             
-            for(let x=0; x<numCols; x++) {
-                for(let y=0; y<numRows; y++) {
-                    if ((x + y) % 2 === 0) {
-                        ctx.fillRect(finishX + x*sqW, h*0.2 + y*sqH, sqW, sqH);
+            // Draw Lanes (3 dividers for 4 lanes)
+            const laneHeight = (h*0.6) / 4;
+            ctx.strokeStyle = '#57606f';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([20, 20]);
+            for(let i=1; i<4; i++) {
+                ctx.beginPath();
+                ctx.moveTo(- (racingState.scrollOffset % 40), h*0.2 + i*laneHeight);
+                ctx.lineTo(w, h*0.2 + i*laneHeight);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+            
+            // Draw Bushes (Parallax)
+            ctx.fillStyle = '#218c74';
+            for(let i=0; i<10; i++) {
+                const bx = ((i*150 - racingState.scrollOffset*0.8) % (w+100)) - 50;
+                ctx.beginPath();
+                ctx.arc(bx, h*0.08 + Math.sin(i)*20, 30, 0, Math.PI*2);
+                ctx.fill();
+                
+                const bx2 = ((i*180 - racingState.scrollOffset*0.8) % (w+100)) - 50;
+                ctx.beginPath();
+                ctx.arc(bx2, h*0.92 + Math.cos(i)*20, 35, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            ctx.filter = 'none'; // Reset filter for HUD/UI elements
+
+            const basePlayerX = w * 0.3;
+            const playerObj = racingState.cars.find(c => c.isPlayer);
+            if (!playerObj) {
+                if(vibActive) ctx.restore();
+                return;
+            }
+            const playerProg = playerObj.progress;
+
+            // Draw Finish Line (Checkered)
+            const relFinish = 1 - playerProg;
+            const finishX = basePlayerX + (relFinish * w * 0.8);
+            if (finishX > 0 && finishX < w + 200) {
+                ctx.fillStyle = '#000';
+                const finishWidth = 40;
+                ctx.fillRect(finishX, h*0.2, finishWidth, h*0.6);
+                
+                ctx.fillStyle = '#ffffff';
+                const numCols = 2; 
+                const sqW = finishWidth / numCols;
+                const numRows = 10;
+                const sqH = (h*0.6) / numRows;
+                
+                for(let x=0; x<numCols; x++) {
+                    for(let y=0; y<numRows; y++) {
+                        if ((x + y) % 2 === 0) {
+                            ctx.fillRect(finishX + x*sqW, h*0.2 + y*sqH, sqW, sqH);
+                        }
                     }
                 }
             }
-        }
 
-        // Draw Cars
-        
-        racingState.cars.forEach((c, idx) => {
-            const laneCenterY = h*0.2 + laneHeight*idx + laneHeight/2;
+            // Draw Cars
+            racingState.cars.forEach((c, idx) => {
+                const laneCenterY = h*0.2 + laneHeight*idx + laneHeight/2;
+                const relativeProg = c.progress - playerProg;
+                const cx = basePlayerX + (relativeProg * w * 0.8);
+                
+                if(cx > -100 && cx < w + 100) {
+                    if (!c.particles) c.particles = [];
+                    if (Math.random() < 0.3) {
+                        c.particles.push({
+                            x: cx, y: laneCenterY + (Math.random()-0.5)*20,
+                            vx: -2 - Math.random()*2, vy: (Math.random()-0.5)*0.5,
+                            life: 1.0, size: 2 + Math.random()*3
+                        });
+                    }
+                    c.particles.forEach((p) => {
+                        p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+                        if (p.life > 0) {
+                            ctx.fillStyle = `rgba(255, 255, 255, ${p.life * 0.5})`;
+                            ctx.beginPath();
+                            ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                    });
+                    c.particles = c.particles.filter(p => p.life > 0);
+
+                    drawTopDownCar(ctx, cx, laneCenterY, c);
+                    
+                    // Name Tag Box
+                    ctx.font = 'bold 14px "Rajdhani", sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const tw = ctx.measureText(c.name).width;
+                    const pad = 10;
+                    const tagX = cx - tw - pad*2 - 40; 
+                    const triX = cx - 40;
+                    
+                    ctx.fillStyle = c.isPlayer ? '#ff2d55' : '#fff';
+                    ctx.beginPath();
+                    ctx.roundRect(tagX, laneCenterY - 14, tw + pad*2, 28, 6);
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(triX, laneCenterY);
+                    ctx.lineTo(triX - 10, laneCenterY - 6);
+                    ctx.lineTo(triX - 10, laneCenterY + 6);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = c.isPlayer ? '#fff' : '#000';
+                    ctx.fillText(c.name, tagX + (tw + pad*2)/2, laneCenterY);
+                }
+            });
             
-            // x position based on relative progress to player
-            const relativeProg = c.progress - playerProg;
-            const cx = basePlayerX + (relativeProg * w * 0.8);
-            
-            if(cx > -100 && cx < w + 100) {
-                // Name Tag Box
-                ctx.font = 'bold 14px "Rajdhani", sans-serif';
-                const tw = ctx.measureText(c.name).width;
-                const pad = 10;
-                
-                // Position tag further left to avoid overlap with large car sprite
-                const tagX = cx - tw - pad*2 - 40; 
-                const triX = cx - 40;
-                
-                ctx.fillStyle = c.isPlayer ? '#ff2d55' : '#fff';
-                ctx.beginPath();
-                ctx.roundRect(tagX, laneCenterY - 14, tw + pad*2, 28, 6);
-                ctx.fill();
-                
-                // small triangle pointer
-                ctx.beginPath();
-                ctx.moveTo(triX, laneCenterY);
-                ctx.lineTo(triX - 10, laneCenterY - 6);
-                ctx.lineTo(triX - 10, laneCenterY + 6);
-                ctx.fill();
-                
-                // Name Text
-                ctx.fillStyle = c.isPlayer ? '#fff' : '#000';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(c.name, tagX + (tw + pad*2)/2, laneCenterY);
-                
-                drawTopDownCar(ctx, cx, laneCenterY, c);
+            // Flash red if wrong key
+            if(racingState.wrongFlash > 0) {
+                racingState.wrongFlash--;
+                ctx.fillStyle = `rgba(255,0,0,${racingState.wrongFlash/15 * 0.3})`;
+                ctx.fillRect(0,0,w,h);
             }
-        });
-        
-        // Flash red if wrong key
-        if(racingState.wrongFlash > 0) {
-            racingState.wrongFlash--;
-            ctx.fillStyle = `rgba(255,0,0,${racingState.wrongFlash/15 * 0.3})`;
-            ctx.fillRect(0,0,w,h);
-        }
 
-        if(racingState.active) {
-            if(racingState.vibration > 0) ctx.restore(); 
-            requestAnimationFrame(racingLoop);
+            if(vibActive) ctx.restore(); 
+
+        } catch (err) {
+            console.error("Racing Loop Crushed:", err);
         }
     }
 
@@ -2777,6 +2915,7 @@
         glitchIntensity: 0,
         colorHue: 190,
         particles: [],
+        totalKeystrokes: 0,
     };
 
     let artCtx;
@@ -2814,12 +2953,15 @@
         else if (neonState.level >= 6) levelKey = 6;
         else if (neonState.level >= 3) levelKey = 3;
         
-        // Words get longer as score increases
-        const minLen = Math.min(6, 3 + Math.floor(neonState.score / 5000));
-        const maxLen = Math.min(15, 5 + Math.floor(neonState.score / 2000));
-        
-        const commonPool = COMMON_WORDS.filter(w => w.length >= minLen && w.length <= maxLen);
-        
+        // Shuffle function (Fisher-Yates)
+        const shuffle = (array) => {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        };
+
         // Pick thematic tier based on score
         let tier = 1;
         if (neonState.score > 20000) tier = 15;
@@ -2829,8 +2971,12 @@
 
         const thematicPool = NEON_WORDS[tier] || NEON_WORDS[1] || [];
         
-        // Final pool with thematic priority
-        const fullPool = [...thematicPool, ...commonPool.slice(0, 150)];
+        // Final pool with thematic priority + Shuffled Common Words
+        // We Use a larger slice (300) to ensure plenty of candidates
+        const shuffledCommon = shuffle([...COMMON_WORDS]);
+        const commonPool = shuffledCommon.filter(w => w.length >= minL && w.length <= maxL).slice(0, 300);
+        
+        const fullPool = [...thematicPool, ...commonPool];
 
         // NO DUPLICATE STARTING LETTERS: Collect first letters of all untyped words on screen
         const screenFirstLetters = new Set(
@@ -2838,26 +2984,28 @@
         );
 
         // Strict Exclusion: Filter words already on screen, recently typed, OR sharing a starting letter
-        const activeWords = neonState.words.map(w => w.text);
-        const excluded = new Set([...activeWords, ...neonState.recentWords, ...(neonState.everUsed || [])]);
+        const activeWords = new Set(neonState.words.map(w => w.text));
         
-        let filteredPool = fullPool.filter(w => !excluded.has(w) && !screenFirstLetters.has(w[0].toLowerCase()));
+        let filteredPool = fullPool.filter(w => 
+            !activeWords.has(w) && 
+            !neonState.recentWords.includes(w) && 
+            !neonState.everUsed.has(w) &&
+            !screenFirstLetters.has(w[0].toLowerCase())
+        );
         
-        // EMERGENCY POOL DEPLETION: Reset session memory if we ran out of 500+ unique words
+        // EMERGENCY POOL DEPLETION: Reset session memory if we ran out
         if (filteredPool.length === 0) {
             neonState.everUsed.clear();
-            filteredPool = fullPool.filter(w => !activeWords.includes(w) && !screenFirstLetters.has(w[0].toLowerCase()));
+            filteredPool = fullPool.filter(w => !activeWords.has(w) && !screenFirstLetters.has(w[0].toLowerCase()));
         }
 
-        // SECOND FALLBACK: Ignore first-letter unique targeting if pool is still empty
+        // SECOND FALLBACK: Ignore first-letter unique targeting
         if (filteredPool.length === 0) {
-            filteredPool = fullPool.filter(w => !activeWords.includes(w));
+            filteredPool = fullPool.filter(w => !activeWords.has(w));
         }
 
-        // ABSOLUTE FALLBACK: Return something to prevent the game from freezing
-        if (filteredPool.length === 0) {
-            filteredPool = fullPool;
-        }
+        // ABSOLUTE FALLBACK
+        if (filteredPool.length === 0) filteredPool = fullPool;
 
         const sorted = filteredPool.sort((a,b) => {
             let scoreA = 0, scoreB = 0;
@@ -2866,10 +3014,9 @@
             return scoreB - scoreA;
         });
         
-        // Pick from top N candidates for high variety
         const topN = Math.min(5, sorted.length);
-        const randomIndex = Math.floor(Math.random() * topN);
-        return sorted[randomIndex];
+        const randomIndex = Math.floor(Math.random() * (topN || 1));
+        return sorted[randomIndex] || thematicPool[0] || "CYBER";
     }
 
     function spawnNeonWord() {
@@ -2935,8 +3082,9 @@
         const canvas = document.getElementById('artilleryCanvas');
         if (!canvas || !screen) return;
         artCtx = canvas.getContext('2d');
-        neonState.canvasW = canvas.width = screen.clientWidth;
-        neonState.canvasH = canvas.height = screen.clientHeight;
+        // Ensure non-zero dimensions to prevent internal browser crash
+        neonState.canvasW = canvas.width = screen.clientWidth || window.innerWidth;
+        neonState.canvasH = canvas.height = screen.clientHeight || window.innerHeight;
     }
 
     function startArtillery() {
@@ -2964,18 +3112,29 @@
         neonState.multiplier = 1;
         neonState.glitchIntensity = 0;
         neonState.colorHue = 190;
+        neonState.totalKeystrokes = 0;
+        neonState.level = 1; // Initialize level
+        neonState.lastTime = performance.now();
+        neonState.loopId = (neonState.loopId || 0) + 1; // Anti-zombie loop
+        const thisLoopId = neonState.loopId;
         
-        updateNeonTypingArea(); // Clear the typing area overlay
+        updateNeonTypingArea(); 
 
         document.getElementById('artStartOverlay').classList.add('hidden');
         document.getElementById('artHiddenInput').focus();
-        requestAnimationFrame(neonLoop);
+        
+        // Start the loop - pass thisLoopId to closure
+        if (neonState.animationId) cancelAnimationFrame(neonState.animationId);
+        neonState.animationId = requestAnimationFrame(() => neonLoop(thisLoopId));
     }
 
     function handleArtilleryKey(key) {
-        if (!neonState.active) return;
+        try {
+            if (!neonState.active) return;
         // Fix regex typo and support basic alphabetical keys
         if (key.length !== 1 || !/^[a-zA-Z]$/.test(key)) return;
+        
+        neonState.totalKeystrokes++;
         const ch = key.toLowerCase();
 
         if (neonState.targetWord) {
@@ -2999,12 +3158,17 @@
                     }
                     
                     neonState.score += Math.round(w.text.length * 15 * neonState.multiplier);
-                    if (w.type === 'glitch') neonState.score += 100; // Bonus for dangerous targets
+                    if (w.type === 'glitch') neonState.score += 100; 
 
-                    // PRO IDEA: Blast effect on word completion
-                    // FIXED: Use calculated color as primaryColor is out of scope
-                    const blastColor = `hsl(${neonState.colorHue}, 100%, 50%)`;
-                    createNeonBlast(w.x, w.y, blastColor);
+                    // [NEW] Level Up Logic
+                    const nextLevel = 1 + Math.floor(neonState.score / 2500);
+                    if (nextLevel > neonState.level) {
+                        neonState.level = nextLevel;
+                        triggerNeonLevelUp(neonState.level);
+                    }
+
+                    // Use last drawn position for better visual alignment
+                    createNeonBlast(w.lastDrawX || w.x, w.y, `hsl(${neonState.colorHue}, 100%, 50%)`);
 
                     neonState.words = neonState.words.filter(ww => ww !== w);
                     neonState.targetWord = null;
@@ -3028,12 +3192,25 @@
                 found.typed = 1;
                 neonState.totalTyped++;
                 neonState.combo++;
+                
+                // [FIX] Check for instant completion if word is only 1 char
+                if (found.typed >= found.text.length) {
+                    createNeonBlast(found.lastDrawX || found.x, found.y, `hsl(${neonState.colorHue}, 100%, 50%)`);
+                    neonState.words = neonState.words.filter(ww => ww !== found);
+                    neonState.targetWord = null;
+                    playSound('hit');
+                }
             }
         }
 
         const elapsed = (Date.now() - neonState.startTime) / 60000;
         neonState.wpm = elapsed > 0 ? Math.round((neonState.totalTyped / 5) / elapsed) : 0;
         updateArtHUD();
+        } catch (e) {
+            console.error("Artillery Key Error:", e);
+            // Emergency reset of target state to keep it playable
+            neonState.targetWord = null;
+        }
     }
 
     function triggerNeonLevelUp(level) {
@@ -3056,157 +3233,188 @@
         setTimeout(() => {
             overlay.classList.remove('show');
         }, 3000);
+        SoundFX.playLevelUp();
     }
 
-    function neonLoop() {
+    function neonLoop(thisLoopId) {
         if (!neonState.active) return;
-        const ctx = artCtx;
-        const w = neonState.canvasW;
-        const h = neonState.canvasH;
-
-        // Visual Effects: Background Shift & Glitch
-        ctx.fillStyle = '#020205';
-        ctx.fillRect(0, 0, w, h);
         
-        // Shift Hue based on difficulty (Up to 360)
-        neonState.colorHue = 190 + (neonState.score / 1500) % 170;
-        const primaryColor = `hsl(${neonState.colorHue}, 100%, 50%)`;
-        const secondaryColor = `hsl(${neonState.colorHue + 30}, 100%, 50%)`;
+        // [SAFETY] Loop ID check
+        if (thisLoopId !== neonState.loopId) return;
 
-        const leakY = h * (1 - (neonState.leakLevel / 100));
-        const grd = ctx.createLinearGradient(0, leakY, 0, h);
+        const now = performance.now();
+        const deltaTime = now - neonState.lastTime;
+        neonState.lastTime = now;
         
-        if (neonState.isFlowState) {
-            grd.addColorStop(0, 'rgba(168, 85, 247, 0.8)');
-            grd.addColorStop(1, 'rgba(88, 28, 135, 0.4)');
-        } else if (neonState.leakLevel > 75) {
-            grd.addColorStop(0, 'rgba(255, 45, 85, 0.8)');
-            grd.addColorStop(1, 'rgba(127, 29, 29, 0.4)');
-        } else {
-            grd.addColorStop(0, primaryColor.replace(')', ', 0.8)').replace('hsl', 'hsla'));
-            grd.addColorStop(1, secondaryColor.replace(')', ', 0.4)').replace('hsl', 'hsla'));
-        }
+        const dtScale = Math.min(3, deltaTime / 16.67);
 
-        ctx.fillStyle = grd;
-        ctx.beginPath();
-        const time = Date.now() * 0.002;
-        ctx.moveTo(0, leakY);
-        for(let x=0; x<=w; x+=20) {
-            const waveValue = Math.sin(x*0.01 + time) * (10 + neonState.leakLevel/10);
-            ctx.lineTo(x, leakY + waveValue);
-        }
-        ctx.lineTo(w, h);
-        ctx.lineTo(0, h);
-        ctx.fill();
+        // Request next frame EARLY + preserve thisLoopId
+        neonState.animationId = requestAnimationFrame(() => neonLoop(thisLoopId));
 
-        // Visual Complexity: Scanlines Effect (intensifies with leak)
-        const scanlineAlpha = neonState.leakLevel > 50 ? (neonState.leakLevel - 50) / 100 : 0;
-        if (scanlineAlpha > 0) {
-            ctx.fillStyle = `rgba(255, 255, 255, ${scanlineAlpha * 0.05})`;
-            for(let y=0; y<h; y+=4) {
-                ctx.fillRect(0, y, w, 1);
-            }
-        }
-
-        // Spawning Rate increases with score
-        neonState.spawnTimer++;
-        const spawnInterval = Math.max(25, 120 - (neonState.score / 500));
-        if (neonState.spawnTimer > spawnInterval) {
-            spawnNeonWord();
-            neonState.spawnTimer = 0;
-        }
-
-        for (let i = neonState.words.length - 1; i >= 0; i--) {
-            const word = neonState.words[i];
-            word.y -= word.speed;
-            
-            // Wobble/Sway Effect
-            const swayAmount = Math.sin(Date.now() * 0.003 + word.offset) * word.sway;
-            const drawX = word.x + swayAmount;
-
-            const isTarget = word === neonState.targetWord;
-            const r = 40 + (word.text.length * 4);
-
-            ctx.save();
-            ctx.translate(drawX, word.y);
-            
-            // PRO IDEA: Digital Jitter (intensifies with leak level)
-            const leakJitter = neonState.leakLevel > 50 ? (neonState.leakLevel - 50) / 10 : 0;
-            const currentJitter = Math.max(word.jitter, leakJitter);
-            if (currentJitter > 0) {
-                ctx.translate((Math.random()-0.5)*currentJitter, (Math.random()-0.5)*currentJitter);
-                word.jitter *= 0.9; // Fade out hit jitter
+        try {
+            // Continuous WPM calculation
+            const elapsed = (Date.now() - neonState.startTime) / 60000;
+            if (elapsed > 0) {
+                neonState.wpm = Math.round((neonState.totalTyped / 5) / elapsed);
             }
 
-            const isGlitch = word.type === 'glitch';
-            const isRecovery = word.type === 'recovery';
+            const ctx = artCtx;
+            if (!ctx) return;
+            const w = neonState.canvasW;
+            const h = neonState.canvasH;
 
-            ctx.shadowBlur = isTarget ? 30 : 10;
-            ctx.shadowColor = isTarget ? primaryColor : (isGlitch ? '#ff0044' : (isRecovery ? '#ffcc00' : 'rgba(255,255,255,0.2)'));
+            // Visual Effects: Background Shift & Glitch
+            ctx.fillStyle = '#020205';
+            ctx.fillRect(0, 0, w, h);
             
-            ctx.fillStyle = isTarget ? primaryColor.replace(')', ', 0.3)').replace('hsl', 'hsla') : 
-                           (isGlitch ? 'rgba(255, 0, 68, 0.1)' : (isRecovery ? 'rgba(255, 204, 0, 0.1)' : 'rgba(255, 255, 255, 0.05)'));
+            // Shift Hue based on difficulty (Up to 360)
+            neonState.colorHue = 190 + (neonState.score / 1500) % 170;
+            const primaryColor = `hsl(${neonState.colorHue}, 100%, 50%)`;
+            const secondaryColor = `hsl(${neonState.colorHue + 30}, 100%, 50%)`;
+
+            const leakY = h * (1 - (neonState.leakLevel / 100));
+            const grd = ctx.createLinearGradient(0, leakY, 0, h);
             
+            if (neonState.isFlowState) {
+                grd.addColorStop(0, 'rgba(168, 85, 247, 0.8)');
+                grd.addColorStop(1, 'rgba(88, 28, 135, 0.4)');
+            } else if (neonState.leakLevel > 75) {
+                grd.addColorStop(0, 'rgba(255, 45, 85, 0.8)');
+                grd.addColorStop(1, 'rgba(127, 29, 29, 0.4)');
+            } else {
+                grd.addColorStop(0, `hsla(${neonState.colorHue}, 100%, 50%, 0.8)`);
+                grd.addColorStop(1, `hsla(${neonState.colorHue + 30}, 100%, 50%, 0.4)`);
+            }
+
+            ctx.fillStyle = grd;
             ctx.beginPath();
-            ctx.arc(0, 0, r, 0, Math.PI * 2);
-            ctx.fill();
-            
-            ctx.strokeStyle = isTarget ? primaryColor : (isGlitch ? '#ff0044' : (isRecovery ? '#ffcc00' : 'rgba(255,255,255,0.2)'));
-            ctx.lineWidth = (isTarget || isGlitch || isRecovery) ? 3 : 1;
-            ctx.stroke();
-
-            ctx.shadowBlur = 0;
-            ctx.font = `bold 26px 'Share Tech Mono', monospace`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            const typed = word.text.substring(0, word.typed);
-            const untyped = word.text.substring(word.typed);
-            const fullW = ctx.measureText(word.text).width;
-            let startX = -fullW / 2;
-
-            ctx.fillStyle = primaryColor;
-            ctx.fillText(typed, startX + ctx.measureText(typed).width / 2, 0);
-            ctx.fillStyle = 'rgba(255,255,255,0.5)';
-            ctx.fillText(untyped, startX + ctx.measureText(typed).width + ctx.measureText(untyped).width / 2, 0);
-            ctx.restore();
-
-            if (word.y < -100) {
-                const leakDamage = word.type === 'glitch' ? 12 : 8;
-                neonState.leakLevel = Math.min(100, neonState.leakLevel + leakDamage);
-                neonState.words.splice(i, 1);
-                if (neonState.targetWord === word) neonState.targetWord = null;
+            const time = now * 0.002;
+            ctx.moveTo(0, leakY);
+            for(let x=0; x<=w; x+=20) {
+                const waveValue = Math.sin(x*0.01 + time) * (10 + neonState.leakLevel/10);
+                ctx.lineTo(x, leakY + waveValue);
             }
+            ctx.lineTo(w, h);
+            ctx.lineTo(0, h);
+            ctx.fill();
+
+            // Visual Complexity: Scanlines Effect (intensifies with leak)
+            const scanlineAlpha = neonState.leakLevel > 50 ? (neonState.leakLevel - 50) / 100 : 0;
+            if (scanlineAlpha > 0) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${scanlineAlpha * 0.05})`;
+                for(let y=0; y<h; y+=4) {
+                    ctx.fillRect(0, y, w, 1);
+                }
+            }
+
+            // Spawning Rate increases with score
+            neonState.spawnTimer += dtScale;
+            const spawnInterval = Math.max(25, 120 - (neonState.score / 500));
+            if (neonState.spawnTimer > spawnInterval) {
+                spawnNeonWord();
+                neonState.spawnTimer = 0;
+            }
+
+            for (let i = neonState.words.length - 1; i >= 0; i--) {
+                const word = neonState.words[i];
+                word.y -= (word.speed * dtScale);
+                
+                // Wobble/Sway Effect
+                const swayAmount = Math.sin(now * 0.003 + word.offset) * word.sway;
+                const drawX = word.x + swayAmount;
+                word.lastDrawX = drawX; // Cache for blast effect alignment
+
+                const isTarget = word === neonState.targetWord;
+                const r = 40 + (word.text.length * 4);
+
+                ctx.save();
+                ctx.translate(drawX, word.y);
+                
+                // PRO IDEA: Digital Jitter (intensifies with leak level)
+                const leakJitter = neonState.leakLevel > 50 ? (neonState.leakLevel - 50) / 10 : 0;
+                const currentJitter = Math.max(word.jitter, leakJitter);
+                if (currentJitter > 0) {
+                    ctx.translate((Math.random()-0.5)*currentJitter, (Math.random()-0.5)*currentJitter);
+                    word.jitter *= 0.9; // Fade out hit jitter
+                }
+
+                const isGlitch = word.type === 'glitch';
+                const isRecovery = word.type === 'recovery';
+
+                ctx.shadowBlur = isTarget ? 30 : 10;
+                ctx.shadowColor = isTarget ? primaryColor : (isGlitch ? '#ff0044' : (isRecovery ? '#ffcc00' : 'rgba(255,255,255,0.2)'));
+                
+                ctx.fillStyle = isTarget ? `hsla(${neonState.colorHue}, 100%, 50%, 0.3)` : 
+                               (isGlitch ? 'rgba(255, 0, 68, 0.1)' : (isRecovery ? 'rgba(255, 204, 0, 0.1)' : 'rgba(255, 255, 255, 0.05)'));
+                
+                ctx.beginPath();
+                ctx.arc(0, 0, r, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.strokeStyle = isTarget ? primaryColor : (isGlitch ? '#ff0044' : (isRecovery ? '#ffcc00' : 'rgba(255,255,255,0.2)'));
+                ctx.lineWidth = (isTarget || isGlitch || isRecovery) ? 3 : 1;
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+                ctx.font = `bold 26px 'Share Tech Mono', monospace`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const typed = word.text.substring(0, word.typed);
+                const untyped = word.text.substring(word.typed);
+                const fullW = ctx.measureText(word.text).width;
+                let startX = -fullW / 2;
+
+                ctx.fillStyle = primaryColor;
+                ctx.fillText(typed, startX + ctx.measureText(typed).width / 2, 0);
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.fillText(untyped, startX + ctx.measureText(typed).width + ctx.measureText(untyped).width / 2, 0);
+                ctx.restore();
+
+                if (word.y < -100) {
+                    const leakDamage = word.type === 'glitch' ? 12 : 8;
+                    neonState.leakLevel = Math.min(100, neonState.leakLevel + leakDamage);
+                    
+                    // CRITICAL: Ensure target state is cleared if word escapes
+                    if (neonState.targetWord === word) {
+                        neonState.targetWord = null;
+                        updateNeonTypingArea();
+                    }
+                    neonState.words.splice(i, 1);
+                }
+            }
+
+            // Leak level rising logic
+            let riseBase = neonState.isFlowState ? 0.005 : (0.01 + (neonState.score / 100000));
+            neonState.leakLevel = Math.min(100, neonState.leakLevel + (riseBase * dtScale));
+
+            if (neonState.leakLevel >= 100) {
+                endArtillery();
+                return;
+            }
+
+            // Draw Particles
+            neonState.particles.forEach((p, index) => {
+                p.x += (p.vx * dtScale); 
+                p.y += (p.vy * dtScale);
+                p.life -= (0.03 * dtScale);
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = Math.max(0, p.life);
+                ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+            });
+            neonState.particles = neonState.particles.filter(p => p.life > 0);
+            ctx.globalAlpha = 1.0;
+
+            updateArtHUD();
+        } catch (e) {
+            console.error("Neon Mode Frame Error:", e);
         }
-
-        // Leak level rising logic
-        let riseAmount = neonState.isFlowState ? 0.005 : (0.01 + (neonState.score / 100000));
-        neonState.leakLevel = Math.min(100, neonState.leakLevel + riseAmount);
-
-        if (neonState.leakLevel >= 100) {
-            endArtillery();
-            return;
-        }
-
-        // Draw Particles
-        neonState.particles.forEach((p, index) => {
-            p.x += p.vx; p.y += p.vy;
-            p.life -= 0.03;
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = p.life;
-            ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
-        });
-        neonState.particles = neonState.particles.filter(p => p.life > 0);
-        ctx.globalAlpha = 1.0;
-
-        updateArtHUD();
-        requestAnimationFrame(neonLoop);
     }
 
     function updateArtHUD() {
         const wpmNode = document.getElementById('artWPM');
         const comboNode = document.getElementById('artAcc');
         const scoreEl = document.getElementById('artScore');
-        const levelEl = document.getElementById('artLevel');
+        const levelEl = document.getElementById('artCurrentLevelDisplay');
         const leakFill = document.getElementById('artLives');
         const locNode = document.getElementById('artLocation');
 
@@ -3265,6 +3473,11 @@
     function endArtillery() {
         neonState.active = false;
         
+        // Ensure loop is cancelled
+        if (neonState.animationId) {
+            cancelAnimationFrame(neonState.animationId);
+        }
+
         const score = neonState.score;
         if (score > neonState.highScore) {
             neonState.highScore = score;
@@ -3274,6 +3487,11 @@
         document.getElementById('aResScore').innerText = score;
         document.getElementById('aResHigh').innerText = neonState.highScore;
         document.getElementById('aResWPM').innerText = Math.round(neonState.wpm);
+        
+        // Save progress to global stats
+        const acc = neonState.totalKeystrokes > 0 ? Math.round((neonState.totalTyped / neonState.totalKeystrokes) * 100) : 0;
+        saveProgress({ wpm: neonState.wpm, acc: acc });
+        updateMenuStats();
         
         // Remove 'hidden' if it exists and always add 'show' for the fade animation
         const res = document.getElementById('artResult');
@@ -3290,16 +3508,17 @@
        ================================================================ */
     
         function getGalaxyWaveData(wave) {
-        // Words to type to clear the wave (Increased for better practice: starts at 8)
-        const enemiesPerWave = 7 + wave;
+        // Words to type to clear the wave (Increased for better practice)
+        const enemiesPerWave = 6 + Math.min(20, wave); // Cap enemies to prevent overwhelm
         
-        // Speed scaling (Slow Poison: Extremely gradual)
-        // Wave 1: 0.30 | It takes ~25 waves to double in speed
-        const baseSpeed = 0.30 + (wave * 0.012);
-        const virusSpeed = 0.40 + (wave * 0.018);
+        // Speed scaling (REDUCED: 0.6 base instead of 1.2)
+        // Wave 1: 0.60 | Wave 10: 1.05 | Wave 20: 1.55
+        // We cap the speed at 1.8 to ensure it stays humanly possible
+        const baseSpeed = Math.min(1.8, 0.60 + (wave * 0.05));
+        const virusSpeed = Math.min(2.5, 0.90 + (wave * 0.08));
 
         // Spawn interval reduction (Start slower: 4s)
-        const spawnInterval = Math.max(1800, 4000 - (wave * 50));
+        const spawnInterval = Math.max(1200, 4000 - (wave * 80));
 
         return { enemiesPerWave, baseSpeed, virusSpeed, spawnInterval };
     }
@@ -3364,7 +3583,10 @@
         levelTransitionTimer: 0,
         stars: [],
         pendingSpawns: [],
-        lastHUD: {} // Performance cache for DOM updates
+        totalKeystrokes: 0,
+        lastHUD: {}, // Performance cache for DOM updates
+        lastTime: performance.now(),
+        loopId: 0 // Anti-zombie loop protection
     };
     galaxyState.shipImg.src = 'ship_galaxy.png';
     galaxyState.enemyImg.src = 'enemy_ship.png';
@@ -3385,8 +3607,8 @@
             this.dead = false;
             this.typedIndex = 0; // Track progress for visual highlighting
         }
-        update() {
-            this.y += this.speed;
+        update(dtScale = 1) {
+            this.y += (this.speed * dtScale);
             
             // Check collision with ship area
             const h = galaxyState.canvas ? galaxyState.canvas.height : window.innerHeight;
@@ -3460,12 +3682,17 @@
         // Update mission card with current stats
         document.getElementById('galLevelDisplay').textContent = `WAVE ${galaxyState.wave}`;
         
+        // SAVE PROGRESS to ensure main menu is updated between waves
+        const currentAcc = galaxyState.totalKeystrokes > 0 ? Math.round((galaxyState.charsTyped / galaxyState.totalKeystrokes) * 100) : 0;
+        saveProgress({ wpm: galaxyState.wpm, acc: currentAcc });
+        updateMenuStats();
+        
         const cardParent = document.querySelector('#galStartOverlay .art-opt-group');
         if (cardParent) {
-            let scoreEl = document.getElementById('galStartScore');
+            let scoreEl = document.getElementById('galScore');
             if (!scoreEl) {
                 scoreEl = document.createElement('div');
-                scoreEl.id = 'galStartScore';
+                scoreEl.id = 'galScore';
                 scoreEl.style.fontSize = '16px';
                 scoreEl.style.color = '#10ff82';
                 scoreEl.style.marginTop = '10px';
@@ -3474,6 +3701,13 @@
                 cardParent.appendChild(scoreEl);
             }
             const displayTotal = galaxyState.totalScore + galaxyState.score;
+            
+            // [FIX] Update highscore logic correctly
+            if (displayTotal > galaxyState.highScore) {
+                galaxyState.highScore = displayTotal;
+                localStorage.setItem('typefury_galaxy_highscore', galaxyState.highScore);
+            }
+
             scoreEl.textContent = `SYSTEM PERFORMANCE: ${displayTotal} | BEST: ${galaxyState.highScore}`;
         }
 
@@ -3485,8 +3719,10 @@
         clearGalaxyUI();
         
         // Prevent multiple concurrent loops
+        // Explicitly clear any existing loop before launching a new one
         if (galaxyState.animationId) {
             cancelAnimationFrame(galaxyState.animationId);
+            galaxyState.animationId = null;
         }
 
         galaxyState.canvas = document.getElementById('galaxyCanvas');
@@ -3535,12 +3771,16 @@
         // Always reset these for accurate WPM and Wave tracking
         galaxyState.lives = 3;
         galaxyState.streak = 0; // Reset streak on wave start or retry
-        galaxyState.startTime = Date.now();
+        galaxyState.lastTime = performance.now();
+        galaxyState.loopId++; 
+        const thisLoopId = galaxyState.loopId;
         galaxyState.charsTyped = 0;
+        galaxyState.totalKeystrokes = 0;
         
         // --- PRO IDEA: THREAT LEVEL ALERT ---
-        const threatAlert = document.getElementById('galCurrentLevelDisplay');
+        const threatAlert = document.getElementById('galLevelDisplay');
         if (threatAlert) {
+            const wave = galaxyState.wave;
             threatAlert.textContent = `THREAT LEVEL ${wave}: ${wave < 5 ? 'STABLE' : (wave < 10 ? 'CRITICAL' : 'TERMINAL')}`;
             threatAlert.style.color = wave < 5 ? '#00f2ff' : (wave < 10 ? '#ffcc00' : '#ff2d55');
         }
@@ -3581,8 +3821,10 @@
         updateGalaxyHUD();
         spawnGalaxyWave();
         
-        // Start the loop and track its ID
-        galaxyState.animationId = requestAnimationFrame(galaxyLoop);
+        // Start the loop - pass thisLoopId to closure
+        if (!galaxyState.animationId) {
+            galaxyState.animationId = requestAnimationFrame(() => galaxyLoop(thisLoopId));
+        }
     }
 
     function stopGalaxy() {
@@ -3617,6 +3859,14 @@
     }
 
     function updateGalaxyHUD() {
+        // [NEW] Real-time WPM calculation for Galaxy mode
+        if (galaxyState.active && galaxyState.startTime) {
+            const elapsed = (Date.now() - galaxyState.startTime) / 60000;
+            if (elapsed > 0) {
+                galaxyState.wpm = Math.round((galaxyState.charsTyped / 5) / elapsed);
+            }
+        }
+
         const HUD = {
             score: galaxyState.score,
             wave: galaxyState.wave,
@@ -3646,6 +3896,7 @@
     function handleGalaxyKey(char) {
         if (!galaxyState.active || !char || galaxyState.levelTransition) return;
         
+        galaxyState.totalKeystrokes++;
         try {
             // Find an enemy starting with this char - sort by Y to pick the closest threat
             if (!galaxyState.currentTarget) {
@@ -3762,9 +4013,20 @@
         }
     }
 
-    function galaxyLoop() {
+    function galaxyLoop(thisLoopId) {
         if (!galaxyState.active || !galaxyState.ctx) return;
         
+        // [SAFETY] Check if this is still the authorized loop
+        if (thisLoopId !== galaxyState.loopId) return;
+
+        const now = performance.now();
+        const deltaTime = now - galaxyState.lastTime;
+        galaxyState.lastTime = now;
+        const dtScale = Math.min(3, deltaTime / 16.67);
+
+        // Request next frame EARLY + preserve thisLoopId
+        galaxyState.animationId = requestAnimationFrame(() => galaxyLoop(thisLoopId));
+
         try {
             const ctx = galaxyState.ctx;
             const w = galaxyState.canvas.width;
@@ -3782,61 +4044,67 @@
             ctx.rect(0, 5, w, h);
             ctx.clip();
 
-        // --- DRAW STARFIELD (Simplified for performance) ---
-        ctx.fillStyle = '#fff';
-        ctx.globalAlpha = 0.5;
-        galaxyState.stars.forEach(s => {
-            ctx.fillRect(s.x, s.y, s.size, s.size);
-            s.y += s.speed;
-            if(s.y > h) { s.y = -5; s.x = Math.random() * w; }
-        });
-        ctx.globalAlpha = 1.0;
-
-        // --- DRAW LEVEL TRANSITION ---
-        if (galaxyState.levelTransition) {
-            galaxyState.levelTransitionTimer--;
-            
-            // Safety: Ensure hidden input is blurred during transition to avoid double-typing
-            document.getElementById('galHiddenInput').blur();
-            
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for overlay
-            
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(0, 0, w, h);
-            
-            ctx.font = `bold 40px 'Orbitron', sans-serif`;
-            ctx.fillStyle = '#00f2ff';
-            ctx.textAlign = 'center';
-            ctx.fillText(`WAVE ${galaxyState.wave} CLEARED`, w/2, h/2 - 20);
-            
-            ctx.font = `20px 'Rajdhani', sans-serif`;
+            // --- DRAW STARFIELD (Simplified for performance) ---
             ctx.fillStyle = '#fff';
-            ctx.fillText(`SECTOR SECURED. ADVANCING.`, w/2, h/2 + 20);
-            ctx.restore();
-            
-            if (galaxyState.levelTransitionTimer <= 0) {
-                galaxyState.wave++;
-                localStorage.setItem('typefury_galaxy_wave', galaxyState.wave);
-                galaxyState.levelTransition = false;
-                galaxyState.active = false; // Stop the loop
-                startGalaxyOps(); // Show the "Ready" overlay for the next wave
+            ctx.globalAlpha = 0.5;
+            galaxyState.stars.forEach(s => {
+                ctx.fillRect(s.x, s.y, s.size, s.size);
+                s.y += (s.speed * dtScale);
+                if(s.y > h) { s.y = -5; s.x = Math.random() * w; }
+            });
+            ctx.globalAlpha = 1.0;
+
+            // --- DRAW LEVEL TRANSITION ---
+            if (galaxyState.levelTransition) {
+                galaxyState.levelTransitionTimer--;
+                
+                // Safety: Ensure hidden input is blurred during transition to avoid double-typing
+                document.getElementById('galHiddenInput').blur();
+                
+                ctx.save();
+                ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for overlay
+                
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, w, h);
+                
+                ctx.font = `bold 40px 'Orbitron', sans-serif`;
+                ctx.fillStyle = '#00f2ff';
+                ctx.textAlign = 'center';
+                ctx.fillText(`WAVE ${galaxyState.wave} CLEARED`, w/2, h/2 - 20);
+                
+                ctx.font = `20px 'Rajdhani', sans-serif`;
+                ctx.fillStyle = '#fff';
+                ctx.fillText(`SECTOR SECURED. ADVANCING.`, w/2, h/2 + 20);
+                ctx.restore();
+                
+                if (galaxyState.levelTransitionTimer <= 0) {
+                    galaxyState.wave++;
+                    localStorage.setItem('typefury_galaxy_wave', galaxyState.wave);
+                    
+                    // Save progress between waves and update UI
+                    const acc = galaxyState.totalKeystrokes > 0 ? Math.round((galaxyState.charsTyped / galaxyState.totalKeystrokes) * 100) : 0;
+                    saveProgress({ wpm: galaxyState.wpm, acc: acc });
+                    updateMenuStats();
+                    
+                    galaxyState.levelTransition = false;
+                    galaxyState.active = false; 
+                    startGalaxyOps(); // Show mission card for next wave
+                }
+                
+                ctx.restore(); // Restore Clipping Mask
+                return;
             }
-            
-            requestAnimationFrame(galaxyLoop);
-            return;
-        }
 
-        if (galaxyState.vibration > 0) {
-            ctx.translate((Math.random()-0.5) * galaxyState.vibration, (Math.random()-0.5) * galaxyState.vibration);
-            galaxyState.vibration *= 0.9;
-            if(galaxyState.vibration < 0.1) galaxyState.vibration = 0;
-        }
+            if (galaxyState.vibration > 0) {
+                ctx.translate((Math.random()-0.5) * galaxyState.vibration, (Math.random()-0.5) * galaxyState.vibration);
+                galaxyState.vibration *= 0.9;
+                if(galaxyState.vibration < 0.1) galaxyState.vibration = 0;
+            }
 
-        // Update WPM
-        const elapsed = (Date.now() - galaxyState.startTime) / 60000;
-        if (elapsed > 0) galaxyState.wpm = Math.round((galaxyState.charsTyped / 5) / elapsed);
-        updateGalaxyHUD();
+            // Update WPM
+            const elapsed = (Date.now() - galaxyState.startTime) / 60000;
+            if (elapsed > 0) galaxyState.wpm = Math.round((galaxyState.charsTyped / 5) / elapsed);
+            updateGalaxyHUD();
 
         // Ship rotation logic
         if (galaxyState.currentTarget) {
@@ -3849,7 +4117,7 @@
         let diff = galaxyState.targetAngle - galaxyState.currentAngle;
         while(diff < -Math.PI) diff += Math.PI * 2;
         while(diff > Math.PI) diff -= Math.PI * 2;
-        galaxyState.currentAngle += diff * 0.15;
+        galaxyState.currentAngle += (diff * 0.15 * dtScale);
 
         // --- DRAW ENGINE GLOW ---
         ctx.save();
@@ -3891,7 +4159,7 @@
 
         // Update/Draw Enemies
         galaxyState.enemies.forEach(e => {
-            e.update();
+            e.update(dtScale);
             e.draw(ctx, centerX, shipY);
         });
 
@@ -3943,13 +4211,15 @@
 
                 if (target && !target.dead) { 
                     if (p.isKillShot) {
-                        // Final Blow with Streak Multiplier
+                        // Finalize target destruction
+                        SoundFX.playExplosion();
                         target.dead = true;
                         const points = Math.round(target.word.length * 10 * (1 + galaxyState.streak * 0.05));
                         galaxyState.score += points;
                         createExplosion(target.x, target.y, p.color);
                     } else {
                         // Small impact
+                        SoundFX.playClick();
                         createExplosion(target.x, target.y, '#fff');
                     }
                 }
@@ -4003,11 +4273,11 @@
              updateGalaxyTypingArea();
         }
 
-        galaxyState.animationId = requestAnimationFrame(galaxyLoop);
+        // No more frames requested here; they are requested at the top of galaxyLoop
         } catch (err) {
             console.error("Galaxy Loop Error:", err);
-            // Ensure the loop can recover if it's still active
-            if (galaxyState.active) {
+            // Resilience: If the loop crashed before requesting the next frame, try to recover
+            if (galaxyState.active && (!galaxyState.animationId)) {
                 galaxyState.animationId = requestAnimationFrame(galaxyLoop);
             }
         }
@@ -4021,7 +4291,7 @@
             galaxyState.animationId = null;
         }
 
-        // Final WPM calc (ensure the display has the latest possible data)
+        // Final WPM calc
         const elapsed = (Date.now() - galaxyState.startTime) / 60000;
         if (elapsed > 0) galaxyState.wpm = Math.round((galaxyState.charsTyped / 5) / elapsed);
 
@@ -4032,16 +4302,26 @@
             localStorage.setItem('typefury_galaxy_highscore', galaxyState.highScore);
         }
 
-        // Clean UI and then show results to ensure no "stuck" mission cards
+        // Clean UI
         clearGalaxyUI();
-        document.getElementById('galResScore').textContent = finalTotal;
-        document.getElementById('galResWave').textContent = galaxyState.wave;
-        document.getElementById('galResWPM').textContent = galaxyState.wpm;
+        const resScore = document.getElementById('galResScore');
+        const resWave = document.getElementById('galResWave');
+        const resWPM = document.getElementById('galResWPM');
+        
+        if (resScore) resScore.textContent = finalTotal;
+        if (resWave) resWave.textContent = galaxyState.wave;
+        if (resWPM) resWPM.textContent = galaxyState.wpm;
+        
+        // Save progress to global stats
+        const acc = galaxyState.totalKeystrokes > 0 ? Math.round((galaxyState.charsTyped / galaxyState.totalKeystrokes) * 100) : 0;
+        saveProgress({ wpm: galaxyState.wpm, acc: acc });
         
         // Explicitly show results
         const resOverlay = document.getElementById('galResult');
-        resOverlay.classList.remove('hidden'); // Double check if hidden was used
-        resOverlay.classList.add('show');
+        if (resOverlay) {
+            resOverlay.classList.remove('hidden');
+            resOverlay.classList.add('show');
+        }
     }
 
     /* ================================================================
@@ -4050,6 +4330,46 @@
     document.getElementById('btnRacing').addEventListener('click', startRacing);
     document.getElementById('btnArtillery').addEventListener('click', startArtillery);
     document.getElementById('btnGalaxy').addEventListener('click', startGalaxyOps);
+
+    /* ================================================================
+       SOUND ENGINE (Web Audio API)
+       ================================================================ */
+    // Consolidated at the top of the file
+
+    /* ===== SOUND TOGGLE ===== */
+    const soundToggle = document.getElementById('soundToggle');
+    const soundStatus = document.getElementById('soundStatus');
+    if (soundToggle && soundStatus) {
+        soundToggle.addEventListener('click', () => {
+            const enabled = SoundFX.toggle();
+            soundStatus.textContent = enabled ? 'ON' : 'OFF';
+            soundStatus.style.color = enabled ? 'var(--accent)' : '#ff4757';
+            SoundFX.playClick(); // Feedback sound
+        });
+    }
+
+    function stopAllModes() {
+        // Stop Racing
+        racingState.active = false;
+        SoundFX.stopEngine();
+
+        // Stop Galaxy
+        galaxyState.active = false;
+        galaxyState.loopId++; 
+        if (galaxyState.pendingSpawns) {
+            galaxyState.pendingSpawns.forEach(tid => clearTimeout(tid));
+            galaxyState.pendingSpawns = [];
+        }
+
+        // Stop Neon
+        neonState.active = false;
+        neonState.loopId = (neonState.loopId || 0) + 1;
+        
+        // Ensure all animation IDs are cleared
+        if (racingState.animationId) cancelAnimationFrame(racingState.animationId);
+        if (galaxyState.animationId) cancelAnimationFrame(galaxyState.animationId);
+        if (neonState.animationId) cancelAnimationFrame(neonState.animationId);
+    }
 
     // Racing: use keydown instead of input event for strict validation
     document.addEventListener('keydown', (e) => {
@@ -4062,8 +4382,19 @@
         }
     });
 
+    // AGGRESSIVE RE-FOCUS: If game is active, ensure clicks don't steal focus
+    window.addEventListener('mousedown', () => {
+        if (neonState.active) {
+            setTimeout(() => document.getElementById('artHiddenInput').focus(), 10);
+        } else if (galaxyState.active) {
+            setTimeout(() => document.getElementById('galHiddenInput').focus(), 10);
+        } else if (racingState.active) {
+            setTimeout(() => document.getElementById('racingInput').focus(), 10);
+        }
+    });
+
     document.getElementById('racingBack').addEventListener('click', () => {
-        racingState.active = false;
+        stopAllModes();
         showScreen('mainMenu');
     });
 
@@ -4071,7 +4402,10 @@
         document.getElementById('racingResult').classList.remove('show');
         launchRacing();
     });
-    document.getElementById('rResMenu').addEventListener('click', () => showScreen('mainMenu'));
+    document.getElementById('rResMenu').addEventListener('click', () => {
+        SoundFX.stopEngine();
+        showScreen('mainMenu');
+    });
 
     // Racing setup
     document.getElementById('raceStartBtn').addEventListener('click', launchRacing);
@@ -4079,7 +4413,7 @@
     // Neon Leak (Legacy ID kept for compatibility)
     document.getElementById('artStartBtn').addEventListener('click', launchArtillery);
     document.getElementById('artBack').addEventListener('click', () => {
-        neonState.active = false;
+        stopAllModes();
         showScreen('mainMenu');
     });
     // Add logic for results buttons if they exist in the new HUD
@@ -4125,7 +4459,7 @@
         launchGalaxy(isNew);
     });
     document.getElementById('galBack').addEventListener('click', () => {
-        stopGalaxy();
+        stopAllModes();
         showScreen('mainMenu');
     });
     document.getElementById('galResRestart').addEventListener('click', () => {
@@ -4133,16 +4467,22 @@
         launchGalaxy(false); // FALSE = Keep current wave progress
     });
     document.getElementById('galResMenu').addEventListener('click', () => {
-        stopGalaxy();
+        stopAllModes();
         showScreen('mainMenu');
     });
 
     // Keep hidden input focused for mobile
     document.getElementById('artilleryScreen').addEventListener('click', () => {
-        if (neonState.active) document.getElementById('artHiddenInput').focus();
+        if (neonState.active) {
+            document.getElementById('artHiddenInput').focus();
+            SoundFX.init(); // Ensure context is active on user click
+        }
     });
     document.getElementById('galaxyScreen').addEventListener('click', () => {
-        if (galaxyState.active) document.getElementById('galHiddenInput').focus();
+        if (galaxyState.active) {
+            document.getElementById('galHiddenInput').focus();
+            SoundFX.init(); // Ensure context is active on user click
+        }
     });
 
     /* ===== INIT ===== */
