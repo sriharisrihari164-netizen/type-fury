@@ -2414,10 +2414,10 @@
         typedChars: 0,
         startTime: 0,
         cars: [
-            { id: 'player', name: 'U', color: '#00e5ff', yOff: -0.2, progress: 0, speed: 0, isPlayer: true, imgFile: 'racing_car_blue.png', particles: [] },
-            { id: 'storm', name: 'STORM', color: '#fbc02d', yOff: 0, progress: 0, speed: 0, isPlayer: false, imgFile: 'racing_car_yellow.png', particles: [] },
-            { id: 'vortex', name: 'VORTEX', color: '#e53935', yOff: 0.15, progress: 0, speed: 0, isPlayer: false, imgFile: 'racing_car_green.png', particles: [] },
-            { id: 'pulse', name: 'PULSE', color: '#ffffff', yOff: 0.3, progress: 0, speed: 0, isPlayer: false, imgFile: 'racing_car_grey.png', particles: [] }
+            { id: 'player', name: 'U', color: '#00e5ff', yOff: -0.2, progress: 0, speed: 0, isPlayer: true, imgFile: 'assets/racing_car_blue.png', particles: [] },
+            { id: 'storm', name: 'STORM', color: '#fbc02d', yOff: 0, progress: 0, speed: 0, isPlayer: false, imgFile: 'assets/racing_car_yellow.png', particles: [] },
+            { id: 'vortex', name: 'VORTEX', color: '#e53935', yOff: 0.15, progress: 0, speed: 0, isPlayer: false, imgFile: 'assets/racing_car_green.png', particles: [] },
+            { id: 'pulse', name: 'PULSE', color: '#ffffff', yOff: 0.3, progress: 0, speed: 0, isPlayer: false, imgFile: 'assets/racing_car_grey.png', particles: [] }
         ],
         images: {}, // to store HTMLImageElements
         scrollOffset: 0,
@@ -3670,9 +3670,9 @@
         lastTime: performance.now(),
         loopId: 0 // Anti-zombie loop protection
     };
-    galaxyState.shipImg.src = 'ship_galaxy.png';
-    galaxyState.enemyImg.src = 'enemy_ship.png';
-    galaxyState.virusImg.src = 'enemy_virus.png';
+    galaxyState.shipImg.src = 'assets/ship_galaxy.png';
+    galaxyState.enemyImg.src = 'assets/enemy_ship.png';
+    galaxyState.virusImg.src = 'assets/enemy_virus.png';
 
     class GEnemy {
         constructor(word, type = 'scout') {

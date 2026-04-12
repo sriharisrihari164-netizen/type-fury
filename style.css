@@ -84,15 +84,15 @@ html, body {
     100% { transform: scale(1.1); filter: hue-rotate(10deg); }
 }
 .bg-layer.bg-racing {
-    background: url('bg_racing.png') center/cover no-repeat;
+    background: url('assets/bg_racing.png') center/cover no-repeat;
     filter: brightness(0.5) saturate(1.2);
 }
 .bg-layer.bg-artillery {
-    background: url('bg_artillery.png') center/cover no-repeat;
+    background: url('assets/bg_artillery.png') center/cover no-repeat;
     filter: brightness(0.6) hue-rotate(-10deg);
 }
 .bg-layer.bg-space {
-    background: url('bg_space.png') center/cover no-repeat;
+    background: url('assets/bg_space.png') center/cover no-repeat;
     filter: brightness(0.6);
 }
 .bg-layer.active {
