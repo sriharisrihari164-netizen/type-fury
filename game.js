@@ -3593,14 +3593,18 @@
         // Words to type to clear the wave (Increased for better practice)
         const enemiesPerWave = 6 + Math.min(20, wave); // Cap enemies to prevent overwhelm
         
-        // Speed scaling (REDUCED: 0.6 base instead of 1.2)
-        // Wave 1: 0.60 | Wave 10: 1.05 | Wave 20: 1.55
-        // We cap the speed at 1.8 to ensure it stays humanly possible
-        const baseSpeed = Math.min(1.8, 0.60 + (wave * 0.05));
-        const virusSpeed = Math.min(2.5, 0.90 + (wave * 0.08));
+        // --- SLOW POISON SCALING ---
+        // We reduce the growth rate to make progression feel smoother and more gradual.
+        // Wave 1: 0.625 | Wave 8: 0.80 | Wave 20: 1.10
+        const baseSpeed = Math.min(1.8, 0.60 + (wave * 0.025));
+        
+        // Virus speed grows slightly faster but still much slower than before.
+        // Wave 1: 0.89 | Wave 8: 1.17 | Wave 20: 1.65
+        const virusSpeed = Math.min(2.5, 0.85 + (wave * 0.04));
 
-        // Spawn interval reduction (Start slower: 4s)
-        const spawnInterval = Math.max(1200, 4000 - (wave * 80));
+        // Spawn interval reduction (Started slower: 4.2s, reduction slowed down)
+        // Wave 1: 4140ms | Wave 8: 3720ms | Wave 20: 3000ms
+        const spawnInterval = Math.max(1500, 4200 - (wave * 60));
 
         return { enemiesPerWave, baseSpeed, virusSpeed, spawnInterval };
     }
